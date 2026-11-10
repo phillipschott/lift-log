@@ -1,7 +1,7 @@
 import * as db from '../data/db';
 import type { DayKey, RoutineDay } from '../data/types';
 import type { Screen } from '../app';
-import { weekStatus } from '../logic/week';
+import { BOXING_PER_WEEK, weekStatus } from '../logic/week';
 import { fmtInt, useDb } from './common';
 import { loadTodayFood } from './foodTargets';
 
@@ -47,11 +47,16 @@ export function Home(props: { today: DayKey; go: (s: Screen) => void }) {
         <>
           <div class="week-strip" aria-label="This week">
             <span class="muted">This week</span>
-            {routine.days.map((d) => (
-              <span key={d.id} class={week.done.has(d.id) ? 'wk done' : 'wk'}>
-                {week.done.has(d.id) ? '✓' : '○'} {shortName(d)}
-              </span>
-            ))}
+            {routine.days.map((d) => {
+              const boxed = week.boxing.get(d.id) ?? 0;
+              const partial = d.kind === 'boxing' && boxed > 0 && !week.done.has(d.id);
+              return (
+                <span key={d.id} class={week.done.has(d.id) ? 'wk done' : partial ? 'wk partial' : 'wk'}>
+                  {week.done.has(d.id) ? '✓' : partial ? '◑' : '○'} {shortName(d)}
+                  {d.kind === 'boxing' && ` ${Math.min(boxed, BOXING_PER_WEEK)}/${BOXING_PER_WEEK}`}
+                </span>
+              );
+            })}
           </div>
 
           {next ? (
@@ -76,7 +81,13 @@ export function Home(props: { today: DayKey; go: (s: Screen) => void }) {
                   onClick={() => go({ name: 'workout', dayId: d.id })}
                 >
                   <span class="spacer">{d.name}</span>
-                  {week.done.has(d.id) && <span class="done-mark">✓</span>}
+                  {week.done.has(d.id) ? (
+                    <span class="done-mark">✓</span>
+                  ) : d.kind === 'boxing' && week.boxing.get(d.id) ? (
+                    <span class="muted">
+                      {week.boxing.get(d.id)}/{BOXING_PER_WEEK}
+                    </span>
+                  ) : null}
                 </button>
               ))}
           </div>

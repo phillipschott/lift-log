@@ -47,10 +47,21 @@ describe('week', () => {
 
   it('all four lift days → week done; Boxing ✓ but never Up next', () => {
     const logs = ['day1', 'day2', 'day3', 'day4'].map((d, i) => lift(d, `2026-11-1${i}`));
-    const s = weekStatus(routine, [boxing('2026-11-10')], logs, '2026-11-14');
+    const s = weekStatus(routine, [boxing('2026-11-10'), boxing('2026-11-12')], logs, '2026-11-14');
     expect(s.upNext).toBe(null);
     expect(s.done.has('boxing')).toBe(true);
     expect(weekStatus(routine, [boxing(MON)], [], MON).upNext).toBe('day1');
+  });
+
+  it('boxing counts to 2 a week; one per day', () => {
+    const one = weekStatus(routine, [boxing(MON)], [], '2026-11-11');
+    expect(one.boxing.get('boxing')).toBe(1);
+    expect(one.done.has('boxing')).toBe(false);
+    const sameDay = weekStatus(routine, [boxing(MON), boxing(MON)], [], '2026-11-11');
+    expect(sameDay.boxing.get('boxing')).toBe(1);
+    const two = weekStatus(routine, [boxing(MON), boxing('2026-11-11')], [], '2026-11-11');
+    expect(two.boxing.get('boxing')).toBe(2);
+    expect(two.done.has('boxing')).toBe(true);
   });
 
   it('last week does not count; resets Monday', () => {

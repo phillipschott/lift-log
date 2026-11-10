@@ -1,7 +1,7 @@
 // This week's progress and what's "Up next". Weeks run Monday–Sunday (with the 3 a.m. rollover,
 // since DayKeys already include it).
 //  - A lift day is done (✓) once at least one set was logged for it this week.
-//  - Boxing is ✓ when marked done this week, and is never "Up next".
+//  - Boxing counts sessions (one per day) toward 2 a week: 1/2, then ✓. It is never "Up next".
 //  - Up next = a lift day you already started today (so you can come back to it), else the first
 //    lift day in routine order without ✓, else null (week done).
 
@@ -15,9 +15,14 @@ export function weekStart(k: DayKey): DayKey {
   return addDays(k, -((dow + 6) % 7));
 }
 
+/** Boxing gets ✓ for the week after this many sessions (on different days). */
+export const BOXING_PER_WEEK = 2;
+
 export interface WeekStatus {
   done: Set<string>; // routine day ids with ✓ this week
   upNext: string | null; // routine day id, or null when every lift day is done
+  /** Boxing sessions this week, per boxing routine day id. */
+  boxing: Map<string, number>;
 }
 
 export function weekStatus(routine: Routine, workouts: Workout[], logs: ExerciseLog[], today: DayKey): WeekStatus {
@@ -30,10 +35,17 @@ export function weekStatus(routine: Routine, workouts: Workout[], logs: Exercise
     done.add(l.dayId);
     if (l.date === today) startedToday.add(l.dayId);
   }
-  for (const w of workouts) if (w.boxingDone && inWeek(w.date)) done.add(w.dayId);
+  const boxDates = new Map<string, Set<DayKey>>();
+  for (const w of workouts) {
+    if (!w.boxingDone || !inWeek(w.date)) continue;
+    if (!boxDates.has(w.dayId)) boxDates.set(w.dayId, new Set());
+    boxDates.get(w.dayId)!.add(w.date);
+  }
+  const boxing = new Map([...boxDates].map(([id, dates]) => [id, dates.size]));
+  for (const [id, count] of boxing) if (count >= BOXING_PER_WEEK) done.add(id);
 
   const lifts = routine.days.filter((d) => d.kind === 'lift');
   const upNext =
     lifts.find((d) => startedToday.has(d.id))?.id ?? lifts.find((d) => !done.has(d.id))?.id ?? null;
-  return { done, upNext };
+  return { done, upNext, boxing };
 }
