@@ -1,4 +1,4 @@
-// History: Lifts (start → current per exercise, chart + session log) | Food (hit rates + day marks).
+// History: Progress (weekly glance) | Lifts (start → current per exercise, chart + session log) | Food (hit rates + day marks).
 import { useState } from 'preact/hooks';
 import type { Exercise, ExerciseLog } from '../data/types';
 import * as db from '../data/db';
@@ -8,13 +8,14 @@ import { Sheet, TopBar, useDb } from './common';
 import { SetSheet } from './Workout';
 import { WeightChart } from './hist-chart';
 import { FoodHistory } from './hist-food';
+import { Progress } from './hist-progress';
 import { byDate, shortDay, signed, topLoad } from './hist-util';
 import './history.css';
 
-type Tab = 'lifts' | 'food';
+type Tab = 'progress' | 'lifts' | 'food';
 
 export function History(props: { onBack: () => void }) {
-  const [tab, setTab] = useState<Tab>('lifts');
+  const [tab, setTab] = useState<Tab>('progress');
   const [exId, setExId] = useState<string | null>(null);
   const today = dayKey();
   const data = useDb(() => Promise.all([db.listExercises(), db.allLogs()]), []);
@@ -28,6 +29,9 @@ export function History(props: { onBack: () => void }) {
     <div>
       <TopBar title="History" onBack={props.onBack} />
       <div class="hist-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'progress'} class={tab === 'progress' ? 'on' : ''} onClick={() => setTab('progress')}>
+          Progress
+        </button>
         <button role="tab" aria-selected={tab === 'lifts'} class={tab === 'lifts' ? 'on' : ''} onClick={() => setTab('lifts')}>
           Lifts
         </button>
@@ -35,7 +39,16 @@ export function History(props: { onBack: () => void }) {
           Food
         </button>
       </div>
-      {tab === 'food' ? (
+      {tab === 'progress' ? (
+        <Progress
+          today={today}
+          onPick={(id) => {
+            setTab('lifts');
+            setExId(id);
+            window.scrollTo(0, 0); // the Progress page is long; open the detail at its top
+          }}
+        />
+      ) : tab === 'food' ? (
         <FoodHistory today={today} />
       ) : !data ? null : (
         <LiftList exercises={data[0]} logs={data[1]} today={today} onPick={setExId} />

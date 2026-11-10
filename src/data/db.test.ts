@@ -21,7 +21,7 @@ describe('init', () => {
     const logs = await db.logsForExercise('seated-shoulder-press');
     expect(logs).toHaveLength(1);
     expect(logs[0].sets.map((s) => s.reps)).toEqual([10, 10, 7]);
-    expect(logs[0].date).toBe(today);
+    expect(logs[0].date < today).toBe(true); // seeded a week back, not on install day
     expect((await db.getSettings()).kcalTarget).toBe(2000);
   });
 
@@ -98,8 +98,8 @@ describe('workouts', () => {
     expect(a.plan.map((s) => s.exerciseId)).toContain('face-pulls');
     const c = await db.getOrStartWorkout('day2', yesterday);
     expect(c.id).not.toBe(a.id);
-    // The seeded Day 1 workout is today's Day 1 workout.
-    expect((await db.getOrStartWorkout('day1', today)).id).toBe('seed-workout');
+    // The seeded session is in the past, so today's Day 1 is a fresh workout.
+    expect((await db.getOrStartWorkout('day1', today)).id).not.toBe('seed-history');
   });
 
   it('markBoxingDone creates or finds today’s boxing workout', async () => {

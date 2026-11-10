@@ -1,24 +1,26 @@
 // Weight flags. Pure functions: give them a starting point and the logs, get the state.
 //
-// Rules (fitness-app-spec.md + DECISIONS.md):
-//  - A session HITS target when every target set, at the working weight, reaches target reps.
-//  - Hitting once at a weight = you own it (streak 1). Hitting again next session = 🟢 Up it.
-//  - 🟢 Up it stays until a heavier weight is actually adopted (never becomes Stalled).
-//  - Missing after owning resets the streak to 0; you still own the weight.
-//  - Heavier weight, first session: it's a REAL attempt only if sets 1 and 2 both hit target
-//    reps (or you tapped Undo on the drop-back). Otherwise the app drops back and nothing changes.
-//  - Real attempt → 🔵 Attempting at the new weight (or owned at once if every set hit).
-//  - Only sets at the working weight count. Lighter sets are logged but ignored by flags.
-//  - 🟠 Stalled: ≥4 sessions at the weight and the last 3 never beat the best before them,
-//    or 28+ days on the same weight.
+// Rules (DECISIONS.md, revised 2026-11-10 after the skeptic review):
+//  1. A session HITS when the first N sets (N = target sets) at the working weight all reach
+//     target reps. Extra sets ("+ set") and lighter sets don't count.
+//  2. First hit at a weight = you own it (streak 1). Second hit in a row = 🟢 Up it.
+//  3. 🟢 Up it stays until you actually move to a heavier weight. It never becomes Stalled.
+//  4. Missing after owning resets the streak to 0; you still own the weight.
+//  5. Trying heavier: the attempt weight is your first working set of the session (lighter
+//     warm-ups before it are ignored). It's a REAL attempt only if the first two sets at that
+//     weight both hit target reps (or you tapped Undo on the drop-back). Otherwise the app
+//     drops back and the session changes nothing. A heavier set later in a session at your
+//     working weight (e.g. a typo on set 3) is ignored, not treated as an attempt.
+//  6. 🔵 Attempting = a real attempt at this weight, not hit yet.
+//  7. 🟠 Stalled = 3 sessions in a row at the weight with no new best in total reps.
+//  8. Per-day flags only for a slot with its own per-day starting weight (Day 4 incline @ 35/35).
 
 import type { DayKey, Exercise, ExerciseLog, Load, SetLog, Slot } from '../data/types';
-import { daysBetween } from './dates';
 
 export type Flag = 'attempting' | 'up' | 'stalled' | null;
 
-export const STALL_SESSIONS = 4;
-export const STALL_DAYS = 28;
+/** Stalled after this many sessions in a row without a new best (needs one earlier session to compare). */
+export const STALL_RUN = 3;
 
 export interface FlagState {
   /** Current working weight: what the set rows prefill with. null = set on first log. */
@@ -28,12 +30,11 @@ export interface FlagState {
   attempting: boolean;
   streak: number;
   upIt: boolean;
-  /** Day the working weight was adopted (for the 28-day stall). */
+  /** Day the working weight was adopted. */
   since: DayKey | null;
-  /** Total reps at the working weight, one entry per session since it was adopted. */
+  /** Total reps over the judged sets at the working weight, one entry per session since adopted. */
   totals: number[];
   flag: Flag;
-  stalledBy?: 'reps' | 'time';
 }
 
 export interface Baseline {
@@ -57,25 +58,28 @@ function initial(b: Baseline): FlagState {
   };
 }
 
-/** Heaviest load among sets heavier than the working weight, if any. */
-function heavierLoad(sets: SetLog[], w: Load): Load | null {
-  let top: Load | null = null;
-  for (const s of sets) if (heavier(s.load, w) && (!top || heavier(s.load, top))) top = s.load;
-  return top;
+/**
+ * The heavier weight this session is an attempt at, or null. It's the first set that isn't
+ * lighter than the working weight (lighter warm-ups are skipped), if that set is heavier.
+ */
+function attemptLoad(sets: SetLog[], w: Load): Load | null {
+  const first = sets.find((s) => !heavier(w, s.load));
+  return first && heavier(first.load, w) ? first.load : null;
 }
 
-/** Sets 1 and 2 at the new weight both hit target reps. */
+/** The first two sets at the new weight both hit target reps. */
 export function isRealAttempt(sets: SetLog[], n: Load, targetReps: number): boolean {
-  const firstTwo = sets.slice(0, 2);
-  return firstTwo.length > 0 && firstTwo.every((s) => same(s.load, n) && s.reps >= targetReps);
+  const firstTwo = sets.filter((s) => same(s.load, n)).slice(0, 2);
+  return firstTwo.length > 0 && firstTwo.every((s) => s.reps >= targetReps);
 }
 
 function scoreAtWorking(st: FlagState, log: ExerciseLog): void {
   const w = st.working!;
-  const atW = log.sets.filter((s) => same(s.load, w));
-  if (atW.length === 0) return; // whole session lighter: logged, ignored by flags
-  st.totals.push(atW.reduce((t, s) => t + s.reps, 0));
-  const hit = atW.length >= log.targetSets && atW.every((s) => s.reps >= log.targetReps);
+  // Only the first N sets at the working weight are judged; extra sets don't spoil a hit.
+  const judged = log.sets.filter((s) => same(s.load, w)).slice(0, log.targetSets);
+  if (judged.length === 0) return; // whole session lighter: logged, ignored by flags
+  st.totals.push(judged.reduce((t, s) => t + s.reps, 0));
+  const hit = judged.length >= log.targetSets && judged.every((s) => s.reps >= log.targetReps);
   if (st.attempting) {
     if (hit) {
       st.attempting = false;
@@ -100,7 +104,7 @@ export function applyLog(st: FlagState, log: ExerciseLog): FlagState {
     s.since = log.date;
   }
 
-  const n = heavierLoad(log.sets, s.working!);
+  const n = attemptLoad(log.sets, s.working!);
   if (n) {
     if (!(log.keepHeavier || isRealAttempt(log.sets, n, log.targetReps))) {
       return s; // dropped back: nothing changes, 🟢 Up it stays on for next time
@@ -124,59 +128,52 @@ function sortLogs(logs: ExerciseLog[]): ExerciseLog[] {
   );
 }
 
-export function withFlag(st: FlagState, today: DayKey): FlagState {
-  const s = { ...st, flag: null as Flag, stalledBy: undefined as FlagState['stalledBy'] };
+export function withFlag(st: FlagState): FlagState {
+  const s = { ...st, flag: null as Flag };
   if (!s.working) return s;
   if (s.upIt) {
     s.flag = 'up';
     return s;
   }
   const t = s.totals;
-  if (t.length >= STALL_SESSIONS) {
-    const bestBefore = Math.max(...t.slice(0, -(STALL_SESSIONS - 1)));
-    const bestRecent = Math.max(...t.slice(-(STALL_SESSIONS - 1)));
-    if (bestRecent <= bestBefore) s.stalledBy = 'reps';
+  if (t.length > STALL_RUN) {
+    const bestBefore = Math.max(...t.slice(0, -STALL_RUN));
+    const bestRecent = Math.max(...t.slice(-STALL_RUN));
+    if (bestRecent <= bestBefore) s.flag = 'stalled';
   }
-  if (!s.stalledBy && s.since && daysBetween(s.since, today) >= STALL_DAYS) s.stalledBy = 'time';
-  if (s.stalledBy) s.flag = 'stalled';
-  else if (s.attempting) s.flag = 'attempting';
+  if (!s.flag && s.attempting) s.flag = 'attempting';
   return s;
 }
 
-export function computeFlagState(baseline: Baseline, logs: ExerciseLog[], today: DayKey): FlagState {
-  const st = sortLogs(logs).reduce(applyLog, initial(baseline));
-  return withFlag(st, today);
+/** `today` is kept for callers; flags no longer depend on the calendar (the 28-day rule was cut). */
+export function computeFlagState(baseline: Baseline, logs: ExerciseLog[], _today?: DayKey): FlagState {
+  return withFlag(sortLogs(logs).reduce(applyLog, initial(baseline)));
 }
 
 /**
- * Called after each set is logged during a workout. If this is the first session at a
- * heavier weight and set 1 or set 2 fell short, returns the weight to drop back to
- * (the remaining sets prefill with it; the UI shows "Back to 50/50" + Undo). Otherwise null.
+ * Called after each set during a workout. If this session is an attempt at a heavier weight
+ * and one of the first two sets at that weight fell short, returns the weight to drop back to
+ * (remaining rows prefill with it; the UI shows "Back to 50/50" + Undo). Otherwise null.
  */
 export function dropBackTo(st: FlagState, setsSoFar: SetLog[], targetReps: number): Load | null {
   const w = st.working;
-  if (!w || setsSoFar.length === 0 || setsSoFar.length > 2) return null;
-  const n = heavierLoad(setsSoFar, w);
+  if (!w) return null;
+  const n = attemptLoad(setsSoFar, w);
   if (!n) return null;
-  const short = setsSoFar.some((s) => same(s.load, n) && s.reps < targetReps);
-  return short ? w : null;
+  const firstTwo = setsSoFar.filter((s) => same(s.load, n)).slice(0, 2);
+  return firstTwo.some((s) => s.reps < targetReps) ? w : null;
 }
 
 /**
- * Which logs drive a slot's flags and prefill: this lift's sessions on this routine day if
- * there are any, otherwise all of its sessions. Keeps Incline press Day 1 (50/50) and Day 4
- * (35/35) from fighting, while History still shows one combined history.
+ * Which logs drive a card's flags, prefill and "Last:": a slot with its own per-day starting
+ * weight (Day 4 Incline press @ 35/35) uses only that day's sessions; everything else uses
+ * all of the lift's sessions. History (no slot/day) always uses all of them.
  */
-export function contextLogs(logsForExercise: ExerciseLog[], dayId: string): ExerciseLog[] {
-  const onDay = logsForExercise.filter((l) => l.dayId === dayId);
-  return onDay.length ? onDay : logsForExercise;
+export function slotLogs(logsForExercise: ExerciseLog[], slot: Slot | undefined, dayId: string | undefined): ExerciseLog[] {
+  return dayId && slot?.start ? logsForExercise.filter((l) => l.dayId === dayId) : logsForExercise;
 }
 
-/**
- * Flag state for one card on a workout day: picks the starting weight (the slot's per-day
- * start, else the exercise's) and the right logs (contextLogs). `slot` is undefined for
- * History, which uses the exercise's own start and all of its logs.
- */
+/** Flag state for one card on a workout day (or, with slot/day undefined, for History). */
 export function stateForSlot(
   ex: Exercise,
   slot: Slot | undefined,
@@ -184,15 +181,28 @@ export function stateForSlot(
   logsForExercise: ExerciseLog[],
   today: DayKey,
 ): FlagState {
-  const onDay = !!dayId && logsForExercise.some((l) => l.dayId === dayId);
-  // A slot with its own per-day start (Day 4 Incline press @ 35/35) only ever uses that day's
-  // sessions, so Day 1's history never leaks into it. Other slots fall back to all sessions.
-  const perDay = !!dayId && !!slot?.start;
-  const logs = onDay || perDay ? logsForExercise.filter((l) => l.dayId === dayId) : logsForExercise;
-  const load = perDay ? slot!.start! : ex.start;
-  // The 28-day clock on the starting weight starts at the first session, not at install.
+  const logs = slotLogs(logsForExercise, slot, dayId);
+  const load = dayId && slot?.start ? slot.start : ex.start;
   const firstDate = logs.reduce<DayKey | null>((m, l) => (!m || l.date < m ? l.date : m), null);
-  return computeFlagState({ load: load ?? null, date: firstDate ?? today }, logs, today);
+  return computeFlagState({ load: load ?? null, date: firstDate ?? today }, logs);
+}
+
+/**
+ * Short plain-English hint for the open card, so the flag says what it needs:
+ *   🔵 "hit 10,10,10 to own it" · owned streak 1 "✓ Own 55/55 · once more → Up it"
+ *   🟢 "try heavier today" · 🟠 "3 sessions, no rep gain". Owned with streak 0: none.
+ */
+export function flagHint(st: FlagState, targetSets: number, targetReps: number): string | null {
+  if (!st.working) return null;
+  switch (st.flag) {
+    case 'up':
+      return 'try heavier today';
+    case 'stalled':
+      return `${STALL_RUN} sessions, no rep gain`;
+    case 'attempting':
+      return `hit ${Array(targetSets).fill(targetReps).join(',')} to own it`;
+  }
+  return st.streak >= 1 ? `✓ Own ${formatLoad(st.working)} · once more → Up it` : null;
 }
 
 /** The most recent log, for the "Last: 50/50 — 10, 10, 7" line. */

@@ -108,10 +108,7 @@ button:disabled { opacity: 0.5; }
 .pick .star { color: var(--warn); }
 .pick.create { color: var(--accent); font-weight: 600; }
 
-/* Home: week strip + Up next */
-.week-strip { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; margin-bottom: 10px; }
-.week-strip .wk { color: var(--muted); }
-.week-strip .wk.done { color: var(--good); font-weight: 600; }
+/* Home: Up next */
 .up-next { width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; margin-bottom: 10px;
   background: var(--accent); border-color: var(--accent); color: #fff; font-size: 22px; font-weight: 700; }
 .up-next .up-next-label { color: rgba(255, 255, 255, 0.8); font-size: 14px; font-weight: 600; }
@@ -125,5 +122,14 @@ button:disabled { opacity: 0.5; }
 .ex-progress.done { color: var(--good); font-weight: 600; }
 .ex-card.complete.collapsed .ex-name { color: var(--muted); }
 .up-next .up-next-name { font-size: 22px; font-weight: 700; }
-.week-strip .wk.partial { color: var(--text); }
 .boxing-row { padding-top: 6px; padding-bottom: 6px; }
+
+/* Done groups (Home days + workout exercises): dimmed, moved below, never green-filled */
+.group-label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 2px 2px; }
+.ex-card.complete.collapsed { background: transparent; border-style: dashed; padding-top: 6px; padding-bottom: 6px; }
+.ex-card.partial { box-shadow: inset 3px 0 0 var(--accent); }
+.ex-card.partial .ex-progress { color: var(--accent); font-weight: 600; }
+.ex-hint { color: var(--text); }
+.day-btn.done { background: transparent; border-style: dashed; min-height: var(--tap); font-weight: 500; }
+.day-btn.done .spacer { color: var(--muted); }
+.done-word { color: var(--good); font-size: 15px; font-weight: 600; }

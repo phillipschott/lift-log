@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ExerciseLog, Load } from '../data/types';
 import { buildSeed } from '../data/seed';
 import { addDays } from './dates';
-import { computeFlagState, contextLogs, dropBackTo, formatLoad, stateForSlot } from './flags';
+import { computeFlagState, dropBackTo, flagHint, formatLoad, slotLogs, stateForSlot } from './flags';
 
 const ps = (value: number): Load => ({ value, mode: 'per-side' });
 const T0 = '2026-11-09';
@@ -75,7 +75,6 @@ describe('acceptance checks', () => {
     expect(three.flag).toBe('attempting');
     const st = computeFlagState(base50, logs, week(3));
     expect(st.flag).toBe('stalled');
-    expect(st.stalledBy).toBe('reps');
   });
 
   it('#6a a new rep best clears the stall', () => {
@@ -88,12 +87,14 @@ describe('acceptance checks', () => {
     expect(computeFlagState(base50, logs, week(3)).flag).toBe('attempting');
   });
 
-  it('#6b same weight for 28+ days → 🟠 Stalled', () => {
+  it('#6b (revised): time on a weight never causes Stalled — the 28-day rule was cut', () => {
     const logs = [log(T0, ps(55), [10, 10, 7])];
-    expect(computeFlagState(base50, logs, addDays(T0, 27)).flag).toBe('attempting');
-    const st = computeFlagState(base50, logs, addDays(T0, 28));
-    expect(st.flag).toBe('stalled');
-    expect(st.stalledBy).toBe('time');
+    expect(computeFlagState(base50, logs, addDays(T0, 60)).flag).toBe('attempting');
+  });
+
+  it('weekly rep gains never show Stalled', () => {
+    const logs = [5, 6, 7, 8, 9].map((r, i) => log(week(i), ps(55), [10, 10, r]));
+    expect(computeFlagState(base50, logs, week(4)).flag).toBe('attempting');
   });
 });
 
@@ -174,17 +175,15 @@ describe('interview decisions', () => {
     expect(st.working).toEqual(ps(50));
   });
 
-  it('Q6: shared lift — each day uses its own sessions for flags and prefill', () => {
+  it('Q6 (revised): per-day sessions only for a slot with its own starting weight', () => {
     const d1 = [log(week(0), ps(50), [10, 10, 10, 10]), log(week(1), ps(50), [10, 10, 10, 10])];
-    const d4 = [log(week(0), ps(35), [10, 10, 10], { dayId: 'day4' })];
-    const all = [...d1, ...d4];
-    const day4 = computeFlagState({ load: ps(35), date: T0 }, contextLogs(all, 'day4'), week(1));
-    expect(day4.working).toEqual(ps(35));
-    expect(day4.flag).toBe(null);
-    const day1 = computeFlagState(base50, contextLogs(all, 'day1'), week(1));
-    expect(day1.flag).toBe('up');
-    // A day with no sessions yet falls back to all of the lift's sessions.
-    expect(contextLogs(all, 'day3')).toHaveLength(3);
+    const d3 = [log(week(1), ps(50), [10, 10, 10, 10], { dayId: 'day3' })];
+    const all = [...d1, ...d3];
+    // No per-day start → all of the lift's sessions, on every day.
+    expect(slotLogs(all, { id: 's', exerciseId: 'x', sets: 4, reps: 10 }, 'day3')).toHaveLength(3);
+    // Per-day start → that day only.
+    expect(slotLogs(all, { id: 's', exerciseId: 'x', sets: 4, reps: 10, start: ps(35) }, 'day3')).toHaveLength(1);
+    expect(slotLogs(all, undefined, undefined)).toHaveLength(3);
   });
 
   it('Q6: Day 4 incline press keeps 35/35 even after Day 1 has history (stateForSlot)', () => {
@@ -238,5 +237,63 @@ describe('seed', () => {
     for (const e of seed.exercises) for (const s of e.swapIds) expect(ids.has(s), s).toBe(true);
     const d4 = seed.routine.days.find((d) => d.id === 'day4')!;
     expect(d4.slots.find((s) => s.exerciseId === 'incline-press-machine')?.start).toEqual(ps(35));
+  });
+});
+
+describe('skeptic review fixes (2026-11-10)', () => {
+  it('B1: an extra short set after a full 3/3 still counts as a hit', () => {
+    const st = computeFlagState(base50, [log(T0, ps(55), [10, 10, 10, 6], { targetSets: 3 })], T0);
+    expect(st.flag).toBe(null);
+    expect(st.owned).toEqual(ps(55));
+    expect(st.streak).toBe(1);
+  });
+
+  it('editing the seeded session: set 3 7→10 → owned, no flag; 7→9 → still Attempting', () => {
+    const fixed = computeFlagState(base50, [log(T0, ps(55), [10, 10, 10])], T0);
+    expect(fixed.flag).toBe(null);
+    expect(fixed.streak).toBe(1);
+    expect(computeFlagState(base50, [log(T0, ps(55), [10, 10, 9])], T0).flag).toBe('attempting');
+  });
+
+  it('B4: a heavier typo on set 3 does not wipe a session at the working weight', () => {
+    const logs = [log(week(0), ps(55), [10, 10, 7]), log(week(1), [ps(55), ps(55), ps(60)], [10, 10, 10])];
+    const st = computeFlagState(base50, logs, week(1));
+    expect(st.working).toEqual(ps(55));
+    expect(st.totals).toHaveLength(2);
+  });
+
+  it('B4: a heavier typo on set 3 of a first attempt does not wipe the attempt', () => {
+    const st = computeFlagState(base50, [log(T0, [ps(55), ps(55), ps(60)], [10, 10, 7])], T0);
+    expect(st.working).toEqual(ps(55));
+    expect(st.flag).toBe('attempting');
+  });
+
+  it('B4: a lighter warm-up first — dropBackTo and the flag logic agree', () => {
+    const base = computeFlagState(base50, [], T0);
+    const warm = [
+      { load: ps(30), reps: 10, at: 1 },
+      { load: ps(55), reps: 7, at: 2 },
+    ];
+    expect(dropBackTo(base, warm, 10)).toEqual(ps(50));
+    const real = log(T0, [ps(30), ps(55), ps(55), ps(55)], [10, 10, 10, 7], { targetSets: 3 });
+    const st = computeFlagState(base50, [real], T0);
+    expect(st.working).toEqual(ps(55));
+    expect(st.flag).toBe('attempting');
+  });
+
+  it('3 flat sessions after a first one → Stalled; a long break alone never does', () => {
+    const logs = [27, 27, 27, 27].map((_, i) => log(week(i), ps(55), [10, 10, 7]));
+    expect(computeFlagState(base50, logs, week(3)).flag).toBe('stalled');
+    expect(computeFlagState(base50, logs.slice(0, 1), week(10)).flag).toBe('attempting');
+  });
+
+  it('hints say what is needed', () => {
+    const att = computeFlagState(base50, [log(T0, ps(55), [10, 10, 7])], T0);
+    expect(flagHint(att, 3, 10)).toBe('hit 10,10,10 to own it');
+    const own1 = computeFlagState(base50, [log(T0, ps(55), [10, 10, 10])], T0);
+    expect(flagHint(own1, 3, 10)).toBe('✓ Own 55/55 · once more → Up it');
+    const up = computeFlagState(base50, [log(week(0), ps(50), [10, 10, 10]), log(week(1), ps(50), [10, 10, 10])], week(1));
+    expect(flagHint(up, 3, 10)).toBe('try heavier today');
+    expect(flagHint(computeFlagState(base50, [], T0), 3, 10)).toBe(null);
   });
 });

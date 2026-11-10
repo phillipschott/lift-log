@@ -2,7 +2,7 @@ import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import * as db from '../data/db';
 import type { DayKey, Exercise, ExerciseLog, Load, LoadMode, SetLog, Slot, Workout as WorkoutT } from '../data/types';
-import { contextLogs, dropBackTo, FLAG_LABEL, formatLoad, lastLog, stateForSlot } from '../logic/flags';
+import { dropBackTo, FLAG_LABEL, flagHint, formatLoad, lastLog, slotLogs, stateForSlot } from '../logic/flags';
 import { modifySlot, type Scope, type SlotChange } from '../logic/routine';
 import { formatDay } from '../logic/dates';
 import { BOXING_PER_WEEK, weekStart } from '../logic/week';
@@ -91,6 +91,21 @@ function BoxingDay(props: { name: string; today: DayKey; onBack: () => void }) {
 
 // ---------- Lift day ----------
 
+const DONE_LABEL = 'done-label' as const;
+
+/**
+ * Not-done blocks first (routine order), then a "Done" label, then done blocks (routine order).
+ * A block (one card or a superset) is done when every slot has its target sets logged and none
+ * of its cards is open — so a card only moves when it closes, never under your thumb.
+ */
+function orderBlocks(blocks: Slot[][], logs: ExerciseLog[], openSlot: string | null): (Slot[] | typeof DONE_LABEL)[] {
+  const setsFor = (s: Slot) => logs.find((l) => l.exerciseId === s.exerciseId)?.sets.length ?? 0;
+  const isDone = (b: Slot[]) => b.every((s) => setsFor(s) >= s.sets && s.id !== openSlot);
+  const todo = blocks.filter((b) => !isDone(b));
+  const done = blocks.filter(isDone);
+  return done.length ? [...todo, DONE_LABEL, ...done] : todo;
+}
+
 /** Plan order, but slots sharing a supersetGroup are pulled together into one block. */
 function blocksOf(plan: Slot[]): Slot[][] {
   const seen = new Set<string>();
@@ -114,6 +129,7 @@ function LiftDay(props: { name: string; dayId: string; today: DayKey; onBack: ()
   const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [modify, setModify] = useState<Slot | null>(null);
   const [swap, setSwap] = useState<{ slot: Slot; scope: Scope } | null>(null);
+  const wlogs = useDb(() => (workout ? db.logsForWorkout(workout.id) : Promise.resolve(null)), [workout?.id]);
 
   useEffect(() => {
     db.getOrStartWorkout(props.dayId, props.today)
@@ -158,9 +174,15 @@ function LiftDay(props: { name: string; dayId: string; today: DayKey; onBack: ()
     <div class="screen workout">
       <TopBar title={props.name} onBack={leave} />
       {error && <p class="muted">{error}</p>}
-      {workout && exercises && (
+      {workout && exercises && wlogs && (
         <div class="stack">
-          {blocksOf(workout.plan).map((block) => {
+          {orderBlocks(blocksOf(workout.plan), wlogs, openSlot).map((block) => {
+            if (block === DONE_LABEL)
+              return (
+                <div key="done-label" class="group-label">
+                  Done
+                </div>
+              );
             const cards = block.map((slot) => {
               const ex = byId.get(slot.exerciseId);
               if (!ex) return null;
@@ -285,7 +307,8 @@ function ExerciseCard(props: {
   // Once all target sets are logged, show the flag this session earned (e.g. 🟢 Up it).
   // Drop-back logic always uses `before`.
   const shown = log && log.sets.length >= slot.sets ? stateForSlot(ex, slot, workout.dayId, [...prior, log], workout.date) : before;
-  const last = lastLog(slot.start ? prior.filter((l) => l.dayId === workout.dayId) : contextLogs(prior, workout.dayId));
+  const last = lastLog(slotLogs(prior, slot, workout.dayId));
+  const hint = flagHint(shown, slot.sets, slot.reps);
   // Recomputed every render (not kept in state) so a drop-back survives leaving the screen or a reload.
   const droppedTo = log && !log.keepHeavier ? dropBackTo(before, sets, slot.reps) : null;
   const derived = droppedTo ?? sets.at(-1)?.load ?? before.working ?? defaultFor(ex.mode);
@@ -344,7 +367,7 @@ function ExerciseCard(props: {
   const complete = sets.length >= slot.sets;
 
   return (
-    <div class={'card ex-card' + (props.open ? ' open' : ' collapsed') + (complete ? ' complete' : '')}>
+    <div class={'card ex-card' + (props.open ? ' open' : ' collapsed') + (complete ? ' complete' : sets.length ? ' partial' : '')}>
       <div class="row ex-head" role="button" aria-expanded={props.open} onClick={props.onToggle}>
         <span class="ex-caret" aria-hidden="true">{props.open ? '▾' : '▸'}</span>
         <div class="spacer">
@@ -354,10 +377,12 @@ function ExerciseCard(props: {
             {shown.flag && <span class={'flag ' + shown.flag}> · {FLAG_LABEL[shown.flag]}</span>}
           </div>
         </div>
-        <span class={'ex-progress' + (complete ? ' done' : '')}>
-          {complete ? '✓ ' : ''}
-          {sets.length}/{slot.sets}
-        </span>
+        {sets.length > 0 && (
+          <span class={'ex-progress' + (complete ? ' done' : '')}>
+            {complete ? '✓ ' : ''}
+            {sets.length}/{slot.sets}
+          </span>
+        )}
         {props.open && (
           <button
             class="ghost modify-btn"
@@ -375,6 +400,7 @@ function ExerciseCard(props: {
       <>
       <div class="muted ex-last">
         {last ? `Last: ${formatLoad(last.sets[0].load)} — ${last.sets.map((s) => s.reps).join(', ')}` : 'First time'}
+        {hint && <span class="ex-hint"> · {hint}</span>}
       </div>
 
       <div class="sets">
@@ -447,12 +473,16 @@ function ExerciseCard(props: {
           onClose={() => setEditIdx(null)}
           onSave={(s) => {
             const l = latest.current!;
-            save({ ...l, sets: l.sets.map((x, i) => (i === editIdx ? s : x)) });
+            // A fixed set can change whether a drop-back applies: re-derive the prefill, and
+            // forget an earlier Undo if set 1 or 2 changed.
+            setPending(undefined);
+            save({ ...l, keepHeavier: editIdx < 2 ? undefined : l.keepHeavier, sets: l.sets.map((x, i) => (i === editIdx ? s : x)) });
             setEditIdx(null);
           }}
           onDelete={() => {
             const l = latest.current!;
-            save({ ...l, sets: l.sets.filter((_, i) => i !== editIdx) });
+            setPending(undefined);
+            save({ ...l, keepHeavier: editIdx < 2 ? undefined : l.keepHeavier, sets: l.sets.filter((_, i) => i !== editIdx) });
             setEditIdx(null);
           }}
         />

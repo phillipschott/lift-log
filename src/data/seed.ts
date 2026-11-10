@@ -1,5 +1,6 @@
 // Seed routine from the spec + DECISIONS.md. Written to the database on first launch only.
 
+import { addDays } from '../logic/dates';
 import type { DayKey, Exercise, ExerciseLog, ExportFile, Load, RoutineDay, Slot, Workout } from './types';
 
 const ps = (value: number): Load => ({ value, mode: 'per-side' });
@@ -134,13 +135,15 @@ export function buildSeed(today: DayKey, now: number): ExportFile {
     createdAt: now,
   }));
 
-  // Seated machine shoulder press: owned 50/50, attempted 55/55 today with 10, 10, 7.
+  // Seated machine shoulder press: owned 50/50, attempted 55/55 with 10, 10, 7. Dated a week
+  // before install in its own workout, so install day starts with a clean Day 1.
+  const seedDate = addDays(today, -7);
   const day1 = DAYS[0];
-  const workout: Workout = { id: 'seed-workout', date: today, dayId: 'day1', plan: day1.slots.map((s) => ({ ...s })), startedAt: now };
+  const workout: Workout = { id: 'seed-history', date: seedDate, dayId: 'day1', plan: day1.slots.map((s) => ({ ...s })), startedAt: now };
   const log: ExerciseLog = {
     id: 'seed-shoulder-press',
     workoutId: workout.id,
-    date: today,
+    date: seedDate,
     dayId: 'day1',
     exerciseId: 'seated-shoulder-press',
     targetSets: 3,

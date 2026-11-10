@@ -21,6 +21,8 @@ export const BOXING_PER_WEEK = 2;
 export interface WeekStatus {
   done: Set<string>; // routine day ids with ✓ this week
   upNext: string | null; // routine day id, or null when every lift day is done
+  /** Up next is a day you already started today (Home labels it "Today"). */
+  upNextStarted: boolean;
   /** Boxing sessions this week, per boxing routine day id. */
   boxing: Map<string, number>;
 }
@@ -45,7 +47,7 @@ export function weekStatus(routine: Routine, workouts: Workout[], logs: Exercise
   for (const [id, count] of boxing) if (count >= BOXING_PER_WEEK) done.add(id);
 
   const lifts = routine.days.filter((d) => d.kind === 'lift');
-  const upNext =
-    lifts.find((d) => startedToday.has(d.id))?.id ?? lifts.find((d) => !done.has(d.id))?.id ?? null;
-  return { done, upNext, boxing };
+  const started = lifts.find((d) => startedToday.has(d.id))?.id;
+  const upNext = started ?? lifts.find((d) => !done.has(d.id))?.id ?? null;
+  return { done, upNext, upNextStarted: !!started, boxing };
 }
