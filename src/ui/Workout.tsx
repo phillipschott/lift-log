@@ -73,6 +73,8 @@ function LiftDay(props: { name: string; dayId: string; today: DayKey; onBack: ()
   const [error, setError] = useState<string | null>(null);
   const exercises = useDb(() => db.listExercises(), []);
   const [toast, setToast] = useState<ToastState | null>(null);
+  // Every card starts collapsed; one open at a time.
+  const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [modify, setModify] = useState<Slot | null>(null);
   const [swap, setSwap] = useState<{ slot: Slot; scope: Scope } | null>(null);
 
@@ -133,6 +135,9 @@ function LiftDay(props: { name: string; dayId: string; today: DayKey; onBack: ()
                   workout={workout}
                   toast={showToast}
                   onModify={() => setModify(slot)}
+                  open={openSlot === slot.id}
+                  onToggle={() => setOpenSlot((cur) => (cur === slot.id ? null : slot.id))}
+                  onFinished={() => setOpenSlot((cur) => (cur === slot.id ? null : cur))}
                 />
               );
             });
@@ -208,6 +213,9 @@ function ExerciseCard(props: {
   workout: WorkoutT;
   toast: ShowToast;
   onModify: () => void;
+  open: boolean;
+  onToggle: () => void;
+  onFinished: () => void;
 }) {
   const { slot, ex, workout } = props;
   const logs = useDb(() => db.logsForExercise(ex.id), [ex.id]);
@@ -276,6 +284,8 @@ function ExerciseCard(props: {
     save(next);
     setReps(slot.reps);
     if (next.sets.length >= slot.sets) setExtra(false);
+    // Logging the last target set closes the card (one open at a time; you pick what's next).
+    if (next.sets.length === slot.sets) props.onFinished();
 
     if (!next.keepHeavier) {
       const back = dropBackTo(before, next.sets, slot.reps);
@@ -294,10 +304,12 @@ function ExerciseCard(props: {
   const future = Math.max(0, slot.sets - sets.length - 1);
   const short = (s: SetLog) => s.reps < slot.reps;
   const lighter = (s: SetLog) => !!before.working && s.load.value < before.working.value;
+  const complete = sets.length >= slot.sets;
 
   return (
-    <div class="card ex-card">
-      <div class="row ex-head">
+    <div class={'card ex-card' + (props.open ? ' open' : ' collapsed') + (complete ? ' complete' : '')}>
+      <div class="row ex-head" role="button" aria-expanded={props.open} onClick={props.onToggle}>
+        <span class="ex-caret" aria-hidden="true">{props.open ? '▾' : '▸'}</span>
         <div class="spacer">
           <div class="ex-name">{ex.name}</div>
           <div class="muted ex-target">
@@ -305,10 +317,25 @@ function ExerciseCard(props: {
             {shown.flag && <span class={'flag ' + shown.flag}> · {FLAG_LABEL[shown.flag]}</span>}
           </div>
         </div>
-        <button class="ghost modify-btn" onClick={props.onModify} aria-label={`Modify ${ex.name}`}>
-          ⋯
-        </button>
+        <span class={'ex-progress' + (complete ? ' done' : '')}>
+          {complete ? '✓ ' : ''}
+          {sets.length}/{slot.sets}
+        </span>
+        {props.open && (
+          <button
+            class="ghost modify-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onModify();
+            }}
+            aria-label={`Modify ${ex.name}`}
+          >
+            ⋯
+          </button>
+        )}
       </div>
+      {props.open && (
+      <>
       <div class="muted ex-last">
         {last ? `Last: ${formatLoad(last.sets[0].load)} — ${last.sets.map((s) => s.reps).join(', ')}` : 'First time'}
       </div>
@@ -357,6 +384,8 @@ function ExerciseCard(props: {
           </button>
         )}
       </div>
+      </>
+      )}
 
       {weightSheet && (
         <WeightSheet
