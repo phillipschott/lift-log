@@ -27,27 +27,45 @@ export function Workout(props: { dayId: string; today: DayKey; onBack: () => voi
 // ---------- Boxing: one tap ----------
 
 function BoxingDay(props: { name: string; today: DayKey; onBack: () => void }) {
-  const done = useDb(
-    async () => (await db.listWorkouts()).some((w) => w.date === props.today && w.boxingDone),
+  const todays = useDb(
+    async () => (await db.listWorkouts()).filter((w) => w.date === props.today && w.boxingDone),
     [props.today],
   );
   const [busy, setBusy] = useState(false);
+  const done = !!todays?.length;
   return (
     <div class="screen">
       <TopBar title={props.name} onBack={props.onBack} />
       <div class="spacer" />
-      {done && <p class="muted center">Boxing is logged for today ✓</p>}
-      <button
-        class="primary block huge"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          await db.markBoxingDone(props.today);
-          props.onBack();
-        }}
-      >
-        Boxing done
-      </button>
+      {done ? (
+        <div class="stack">
+          <p class="muted center">Boxing is logged for today ✓</p>
+          {/* Marked by mistake: un-mark today's session (it stops counting toward 2 a week). */}
+          <button
+            class="danger block"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              for (const w of todays!) await db.saveWorkout({ ...w, boxingDone: false });
+              setBusy(false);
+            }}
+          >
+            Remove today's boxing
+          </button>
+        </div>
+      ) : (
+        <button
+          class="primary block huge"
+          disabled={busy || !todays}
+          onClick={async () => {
+            setBusy(true);
+            await db.markBoxingDone(props.today);
+            props.onBack();
+          }}
+        >
+          Boxing done
+        </button>
+      )}
     </div>
   );
 }
