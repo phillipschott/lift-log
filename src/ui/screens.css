@@ -1,0 +1,109 @@
+/* Styles for Home, Food, Close-out, Workout, Swap picker. Tokens come from styles.css. */
+
+/* Screens fill the viewport so primary actions can sit at the bottom (one-handed). */
+.screen { display: flex; flex-direction: column; min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 36px); }
+.screen > .spacer { min-height: 16px; }
+.center { text-align: center; }
+button.big { min-height: 60px; font-size: 19px; }
+button.huge { min-height: 96px; font-size: 24px; border-radius: 18px; }
+button:disabled { opacity: 0.5; }
+.sheet-title { margin: 0 0 4px; }
+.sheet-sub { margin: 0 0 12px; }
+.sheet-actions { display: flex; gap: var(--gap); margin-top: 16px; }
+.sheet-go { margin-top: 16px; }
+
+/* ---------- Home ---------- */
+.home h1 { margin-bottom: 12px; }
+.small-link { font-size: 15px; color: var(--muted); }
+.food-card { padding: 16px 18px; }
+.food-line { font-size: 22px; }
+.food-line b { font-variant-numeric: tabular-nums; }
+.food-hint { font-size: 14px; margin-top: 6px; }
+.day-list { display: flex; flex-direction: column; gap: 10px; }
+.day-btn {
+  display: flex; align-items: center; width: 100%; min-height: 64px;
+  font-size: 20px; font-weight: 600; text-align: left; background: var(--surface);
+}
+.day-btn.boxing { font-weight: 500; }
+.done-mark { color: var(--good); font-size: 15px; font-weight: 600; }
+.history-btn { margin-top: 10px; }
+
+/* ---------- Close-out ---------- */
+.closeout h1 { text-align: center; }
+.closeout-totals { text-align: center; font-size: 22px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Food ---------- */
+.totals .total-line { font-size: 26px; font-variant-numeric: tabular-nums; }
+.add-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 14px; }
+.add-row .field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.add-row input { font-size: 22px; text-align: center; padding: 0 8px; }
+.add-btn { flex: 0 0 auto; padding: 0 16px; white-space: nowrap; }
+.entry-list { margin-top: 16px; border-top: 1px solid var(--border); }
+.entry {
+  display: flex; align-items: center; gap: var(--gap); width: 100%; background: none; border: none;
+  border-bottom: 1px solid var(--border); border-radius: 0; padding: 0 4px; text-align: left; font-variant-numeric: tabular-nums;
+}
+.entry-time { font-size: 15px; min-width: 70px; }
+.closed-note { margin: 12px 0 0; }
+
+/* ---------- Workout ---------- */
+.ex-card { padding: 12px 14px; }
+.ex-card.loading { color: var(--muted); }
+.ex-head { gap: 8px; align-items: flex-start; }
+.ex-name { font-size: 19px; font-weight: 600; }
+.ex-target { font-size: 15px; }
+.ex-target .flag { font-size: 15px; }
+.modify-btn { font-size: 26px; min-width: 52px; color: var(--muted); }
+.ex-last { font-size: 15px; margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
+
+.sets { display: flex; flex-direction: column; gap: 6px; }
+.set-row {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px;
+  border-radius: 10px; font-variant-numeric: tabular-nums;
+}
+.set-row.logged { width: 100%; background: var(--surface-2); text-align: left; }
+.set-row.future { color: var(--muted); border: 1px dashed var(--border); }
+.set-n { color: var(--muted); font-size: 14px; min-width: 14px; }
+.set-reps { font-weight: 600; font-size: 18px; }
+.set-reps.short { color: var(--warn); }
+.tick { color: var(--good); }
+
+.active-row { display: grid; grid-template-columns: minmax(84px, 1fr) 52px minmax(96px, 1.2fr) 52px; gap: 6px; }
+.active-row button { padding: 0 6px; min-height: 60px; }
+.weight-btn { font-size: 18px; font-variant-numeric: tabular-nums; }
+.step { font-size: 24px; }
+.reps-btn { font-size: 26px; }
+.reps-tick { font-size: 18px; opacity: 0.85; }
+.extra-btn { align-self: flex-start; min-height: 44px; font-size: 15px; }
+
+.superset { border-left: 3px solid var(--accent); padding-left: 8px; }
+.superset-tag { color: var(--accent); font-size: 14px; font-weight: 600; margin: 0 0 6px 2px; }
+.superset-link { text-align: center; color: var(--accent); font-size: 18px; line-height: 1; margin: 4px 0; }
+.finish { margin-top: 20px; }
+
+/* Weight / set sheets */
+.weight-edit, .reps-edit { display: grid; grid-template-columns: 64px 1fr 64px; gap: 8px; align-items: center; }
+.reps-edit { margin-top: 12px; }
+.weight-input { position: relative; display: flex; align-items: center; gap: 6px; }
+.weight-input input { font-size: 28px; text-align: center; }
+.weight-input .unit { white-space: nowrap; font-size: 15px; }
+.reps-val { text-align: center; font-size: 28px; font-weight: 600; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg button { min-height: 44px; font-size: 15px; padding: 0 4px; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sr-edit { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+.sr-edit input { text-align: center; font-size: 26px; }
+
+/* ---------- Swap picker (full screen so the keyboard never hides the list) ---------- */
+.picker {
+  position: fixed; inset: 0; z-index: 15; background: var(--bg); display: flex; flex-direction: column;
+  padding: calc(var(--safe-top) + 12px) 16px 0; max-width: 560px; margin: 0 auto;
+}
+.picker-head { gap: 8px; }
+.picker-list { flex: 1; overflow: auto; margin-top: 10px; padding-bottom: calc(var(--safe-bottom) + 24px); }
+.pick {
+  display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border);
+  border-radius: 0; padding: 0 6px; font-size: 18px;
+}
+.pick .star { color: var(--warn); }
+.pick.create { color: var(--accent); font-weight: 600; }

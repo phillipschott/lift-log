@@ -1,0 +1,79 @@
+/* Shared base styles. Dark, big tap targets, one-handed: primary actions sit low on the screen.
+   Screens may add classes in their own CSS files but should reuse these tokens. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0e0f11;
+  --surface: #181a1e;
+  --surface-2: #22252b;
+  --border: #2e323a;
+  --text: #f2f3f5;
+  --muted: #9aa0aa;
+  --accent: #4f8cff;
+  --good: #34c76f;
+  --warn: #ff9f2e;
+  --bad: #ff5a5f;
+  --radius: 14px;
+  --tap: 52px; /* minimum tap target height */
+  --gap: 12px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.35 var(--font); }
+body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+#app { min-height: 100dvh; padding: calc(var(--safe-top) + 12px) 16px calc(var(--safe-bottom) + 24px); max-width: 560px; margin: 0 auto; }
+
+h1 { font-size: 28px; margin: 4px 0 16px; }
+h2 { font-size: 20px; margin: 20px 0 10px; }
+.muted { color: var(--muted); }
+.row { display: flex; align-items: center; gap: var(--gap); }
+.spacer { flex: 1; }
+.stack > * + * { margin-top: var(--gap); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+button.card { width: 100%; text-align: left; color: inherit; font: inherit; min-height: var(--tap); }
+
+button, .btn {
+  font: inherit; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 12px;
+  min-height: var(--tap); padding: 0 18px; cursor: pointer;
+}
+button:active { filter: brightness(1.25); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.danger { color: var(--bad); }
+button.ghost { background: none; border: none; color: var(--accent); padding: 0 8px; }
+button.block { width: 100%; }
+
+input[type='number'], input[type='text'], input[type='search'] {
+  font: inherit; font-size: 20px; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 12px; min-height: var(--tap); padding: 0 14px; width: 100%;
+}
+
+/* Bottom sheet for choices (Modify → Just today / Permanently, edit food entry, …) */
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: flex-end; z-index: 10; }
+.sheet {
+  width: 100%; max-width: 560px; margin: 0 auto; background: var(--surface);
+  border-radius: 20px 20px 0 0; padding: 18px 16px calc(var(--safe-bottom) + 18px);
+  max-height: 85dvh; overflow: auto;
+}
+
+/* Flags */
+.flag { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.flag.up { color: var(--good); }
+.flag.attempting { color: var(--accent); }
+.flag.stalled { color: var(--warn); }
+
+/* Toast with undo ("Back to 50/50  Undo") */
+.toast {
+  position: fixed; left: 16px; right: 16px; bottom: calc(var(--safe-bottom) + 16px); z-index: 20;
+  max-width: 528px; margin: 0 auto; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 10px 10px 10px 16px; display: flex; align-items: center; gap: 12px;
+}

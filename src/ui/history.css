@@ -1,0 +1,71 @@
+/* History + Settings. Reuses tokens from styles.css. */
+
+.hist-tabs { display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; }
+.hist-tabs button { flex: 1; background: none; border: none; color: var(--muted); font-weight: 600; }
+.hist-tabs button.on { background: var(--surface-2); color: var(--text); }
+
+.hist-empty { text-align: center; margin-top: 32px; }
+.hist-small { font-size: 14px; }
+
+/* Lifts list */
+.hist-lift { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+.hist-lift-name { font-weight: 600; }
+.hist-lift-load { font-variant-numeric: tabular-nums; }
+.hist-up { color: var(--good); }
+.hist-down { color: var(--warn); }
+
+/* Chart */
+.hist-chart-card { padding: 8px; }
+.hist-chart { display: block; width: 100%; height: auto; }
+.hist-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; }
+.hist-axis { fill: var(--muted); font-size: 13px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.hist-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.hist-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+
+/* Session log */
+.hist-sessions { list-style: none; margin: 0; padding: 0; }
+.hist-sessions li { padding: 12px 2px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.hist-light { color: var(--muted); }
+
+/* Food */
+.hist-rates { margin-bottom: 16px; font-variant-numeric: tabular-nums; }
+.hist-rates > div + div { margin-top: 4px; }
+.hist-day { display: flex; align-items: center; gap: 12px; }
+.hist-day .spacer { display: flex; flex-direction: column; }
+.hist-day-date { font-weight: 600; }
+.hist-mark { font-size: 24px; }
+.hist-sheet-totals { font-variant-numeric: tabular-nums; }
+.hist-entries { list-style: none; margin: 0 0 12px; padding: 0; }
+.hist-entries li + li { margin-top: 6px; }
+.hist-entry { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; text-align: left; font-variant-numeric: tabular-nums; }
+.hist-entry-edit > .row + .row { margin-top: 8px; }
+.hist-add { margin-bottom: 12px; }
+.hist-add input { min-width: 0; }
+.hist-sheet-actions { margin-top: 8px; }
+
+/* Settings */
+.hist-num { width: 64px !important; text-align: center; padding: 0 6px !important; }
+.hist-num.wide { width: 104px !important; }
+.hist-unit { width: 32px; }
+.hist-target { gap: 10px; }
+.hist-chev { display: flex; align-items: center; }
+.hist-slot-name { font-weight: 600; margin-bottom: 8px; }
+.hist-slot-controls { gap: 8px; }
+.hist-icon { width: 48px; padding: 0; font-size: 20px; }
+.hist-icon:disabled { opacity: 0.3; }
+button:disabled { opacity: 0.4; }
+
+.hist-pick-list { display: flex; flex-direction: column; margin-top: 8px; }
+.hist-pick { background: none; border: none; border-bottom: 1px solid var(--border); border-radius: 0; text-align: left; padding: 0 4px; }
+.hist-create { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.hist-details summary { list-style: none; cursor: pointer; }
+.hist-details summary::-webkit-details-marker { display: none; }
+.hist-details summary h2 { display: inline-block; }
+.hist-details summary h2::after { content: ' ›'; color: var(--muted); }
+.hist-details[open] summary h2::after { content: ' ⌄'; }
+
+.hist-file { display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+.hist-file input { position: absolute; inset: 0; opacity: 0; font-size: 0; cursor: pointer; }
+.hist-nowrap { white-space: nowrap; }
+.hist-add button { white-space: nowrap; flex-shrink: 0; }
