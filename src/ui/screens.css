@@ -126,3 +126,4 @@ button:disabled { opacity: 0.5; }
 .ex-card.complete.collapsed .ex-name { color: var(--muted); }
 .up-next .up-next-name { font-size: 22px; font-weight: 700; }
 .week-strip .wk.partial { color: var(--text); }
+.boxing-row { padding-top: 6px; padding-bottom: 6px; }

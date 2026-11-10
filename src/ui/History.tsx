@@ -2,9 +2,10 @@
 import { useState } from 'preact/hooks';
 import type { Exercise, ExerciseLog } from '../data/types';
 import * as db from '../data/db';
-import { dayKey } from '../logic/dates';
+import { dayKey, formatDay } from '../logic/dates';
 import { formatLoad, stateForSlot } from '../logic/flags';
-import { TopBar, useDb } from './common';
+import { Sheet, TopBar, useDb } from './common';
+import { SetSheet } from './Workout';
 import { WeightChart } from './hist-chart';
 import { FoodHistory } from './hist-food';
 import { byDate, shortDay, signed, topLoad } from './hist-util';
@@ -80,6 +81,15 @@ function LiftList(props: { exercises: Exercise[]; logs: ExerciseLog[]; today: st
 function LiftDetail(props: { ex: Exercise; logs: ExerciseLog[]; today: string; onBack: () => void }) {
   const sessions = byDate(props.logs);
   const points = sessions.map((l) => ({ date: l.date, load: topLoad(l)! }));
+  const [editId, setEditId] = useState<string | null>(null);
+  const editing = editId ? props.logs.find((l) => l.id === editId) : undefined;
+  if (!sessions.length)
+    return (
+      <div>
+        <TopBar title={props.ex.name} onBack={props.onBack} />
+        <p class="muted hist-empty">No sessions left.</p>
+      </div>
+    );
   return (
     <div>
       <TopBar title={props.ex.name} onBack={props.onBack} />
@@ -91,7 +101,8 @@ function LiftDetail(props: { ex: Exercise; logs: ExerciseLog[]; today: string; o
         {[...sessions].reverse().map((l) => {
           const top = topLoad(l)!;
           return (
-            <li key={l.id}>
+            <li key={l.id} class="hist-session" role="button" onClick={() => setEditId(l.id)}>
+              <span class="hist-edit-chev" aria-hidden="true">›</span>
               <span class="muted">{shortDay(l.date, props.today)}</span> · <b>{formatLoad(top)}</b> ·{' '}
               {l.sets.map((s, i) => (
                 <span key={i}>
@@ -109,6 +120,77 @@ function LiftDetail(props: { ex: Exercise; logs: ExerciseLog[]; today: string; o
           );
         })}
       </ul>
+      {editing && <SessionSheet ex={props.ex} log={editing} today={props.today} onClose={() => setEditId(null)} />}
     </div>
+  );
+}
+
+/** Edit a past session: fix or delete a set, or delete the whole session. Flags/charts recompute from the data. */
+function SessionSheet(props: { ex: Exercise; log: ExerciseLog; today: string; onClose: () => void }) {
+  const { log } = props;
+  const [setIdx, setSetIdx] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState(false);
+
+  const saveSets = async (sets: ExerciseLog['sets']) => {
+    if (sets.length) await db.saveLog({ ...log, sets });
+    else {
+      await db.deleteLog(log.id);
+      props.onClose();
+    }
+  };
+
+  if (setIdx !== null && log.sets[setIdx])
+    return (
+      <SetSheet
+        n={setIdx + 1}
+        set={log.sets[setIdx]}
+        onClose={() => setSetIdx(null)}
+        onSave={(s) => {
+          setSetIdx(null);
+          saveSets(log.sets.map((x, i) => (i === setIdx ? s : x)));
+        }}
+        onDelete={() => {
+          setSetIdx(null);
+          saveSets(log.sets.filter((_, i) => i !== setIdx));
+        }}
+      />
+    );
+
+  return (
+    <Sheet onClose={props.onClose}>
+      <div class="stack">
+        <h2 style={{ marginTop: 0 }}>
+          {props.ex.name} <span class="muted">— {formatDay(log.date)}</span>
+        </h2>
+        <div class="hist-edit-sets">
+          {log.sets.map((s, i) => (
+            <button key={i} class="hist-edit-set" onClick={() => setSetIdx(i)}>
+              <span class="muted">{i + 1}</span>
+              <span class="spacer">{formatLoad(s.load)}</span>
+              <b>{s.reps}</b>
+              <span class="muted">›</span>
+            </button>
+          ))}
+        </div>
+        {confirm ? (
+          <button
+            class="danger block"
+            onClick={async () => {
+              await db.deleteLog(log.id);
+              props.onClose();
+            }}
+          >
+            Tap again to delete this session
+          </button>
+        ) : (
+          <button class="danger block" onClick={() => setConfirm(true)}>
+            Delete session
+          </button>
+        )}
+        <button class="block" onClick={props.onClose}>
+          Done
+        </button>
+      </div>
+    </Sheet>
   );
 }

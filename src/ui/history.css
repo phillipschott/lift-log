@@ -69,3 +69,9 @@ button:disabled { opacity: 0.4; }
 .hist-file input { position: absolute; inset: 0; opacity: 0; font-size: 0; cursor: pointer; }
 .hist-nowrap { white-space: nowrap; }
 .hist-add button { white-space: nowrap; flex-shrink: 0; }
+
+/* Editable past sessions */
+.hist-session { cursor: pointer; position: relative; padding-right: 22px !important; min-height: 44px; }
+.hist-edit-chev { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.hist-edit-sets { display: flex; flex-direction: column; gap: 8px; }
+.hist-edit-set { display: flex; align-items: center; gap: 14px; text-align: left; font-variant-numeric: tabular-nums; }

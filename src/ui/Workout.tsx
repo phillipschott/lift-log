@@ -4,6 +4,8 @@ import * as db from '../data/db';
 import type { DayKey, Exercise, ExerciseLog, Load, LoadMode, SetLog, Slot, Workout as WorkoutT } from '../data/types';
 import { contextLogs, dropBackTo, FLAG_LABEL, formatLoad, lastLog, stateForSlot } from '../logic/flags';
 import { modifySlot, type Scope, type SlotChange } from '../logic/routine';
+import { formatDay } from '../logic/dates';
+import { BOXING_PER_WEEK, weekStart } from '../logic/week';
 import { Sheet, Toast, TopBar, useDb } from './common';
 import { SwapPicker } from './SwapPicker';
 
@@ -27,44 +29,61 @@ export function Workout(props: { dayId: string; today: DayKey; onBack: () => voi
 // ---------- Boxing: one tap ----------
 
 function BoxingDay(props: { name: string; today: DayKey; onBack: () => void }) {
-  const todays = useDb(
-    async () => (await db.listWorkouts()).filter((w) => w.date === props.today && w.boxingDone),
-    [props.today],
-  );
+  // This week's boxing sessions (Mon–today), so one marked by mistake can be removed.
+  const week = useDb(async () => {
+    const from = weekStart(props.today);
+    return (await db.listWorkouts()).filter((w) => w.boxingDone && w.date >= from && w.date <= props.today);
+  }, [props.today]);
   const [busy, setBusy] = useState(false);
-  const done = !!todays?.length;
+  const dates = [...new Set((week ?? []).map((w) => w.date))].sort().reverse();
+  const doneToday = dates.includes(props.today);
+
+  const remove = async (date: DayKey) => {
+    setBusy(true);
+    for (const w of week!.filter((x) => x.date === date)) await db.saveWorkout({ ...w, boxingDone: false });
+    setBusy(false);
+  };
+
   return (
     <div class="screen">
       <TopBar title={props.name} onBack={props.onBack} />
       <div class="spacer" />
-      {done ? (
+      {week && (
         <div class="stack">
-          <p class="muted center">Boxing is logged for today ✓</p>
-          {/* Marked by mistake: un-mark today's session (it stops counting toward 2 a week). */}
-          <button
-            class="danger block"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              for (const w of todays!) await db.saveWorkout({ ...w, boxingDone: false });
-              setBusy(false);
-            }}
-          >
-            Remove today's boxing
-          </button>
+          <h2 style={{ marginBottom: 0 }}>
+            This week{' '}
+            <span class="muted">
+              {Math.min(dates.length, BOXING_PER_WEEK)}/{BOXING_PER_WEEK}
+            </span>
+          </h2>
+          {dates.length === 0 && <p class="muted">No boxing yet this week.</p>}
+          {dates.map((d) => (
+            <div key={d} class="card row boxing-row">
+              <span class="spacer">
+                {formatDay(d)}
+                {d === props.today && <span class="muted"> · today</span>}
+              </span>
+              <button class="danger" disabled={busy} onClick={() => remove(d)}>
+                Remove
+              </button>
+            </div>
+          ))}
+          {doneToday ? (
+            <p class="muted center">Boxing is logged for today ✓</p>
+          ) : (
+            <button
+              class="primary block huge"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                await db.markBoxingDone(props.today);
+                props.onBack();
+              }}
+            >
+              Boxing done
+            </button>
+          )}
         </div>
-      ) : (
-        <button
-          class="primary block huge"
-          disabled={busy || !todays}
-          onClick={async () => {
-            setBusy(true);
-            await db.markBoxingDone(props.today);
-            props.onBack();
-          }}
-        >
-          Boxing done
-        </button>
       )}
     </div>
   );
@@ -518,7 +537,7 @@ function WeightSheet(props: {
   );
 }
 
-function SetSheet(props: { n: number; set: SetLog; onSave: (s: SetLog) => void; onDelete: () => void; onClose: () => void }) {
+export function SetSheet(props: { n: number; set: SetLog; onSave: (s: SetLog) => void; onDelete: () => void; onClose: () => void }) {
   const [value, setValue] = useState(String(props.set.load.value));
   const [mode, setMode] = useState<LoadMode>(props.set.load.mode);
   const [reps, setReps] = useState(props.set.reps);
