@@ -1,9 +1,22 @@
-// History → Food: 7/30-day hit rates (kcal and protein separately) and the list of past days.
+// History → Food: running deficit + protein for this week and this month (confirmed days only),
+// then the list of days. Deficit = maintenance (sedentary TDEE, Settings) − calories eaten,
+// before exercise; ≈ lbs uses 3,500 kcal per lb.
 import { useState } from 'preact/hooks';
 import type { DayKey, FoodDay, FoodEntry } from '../data/types';
 import * as db from '../data/db';
 import { formatDay } from '../logic/dates';
-import { MARK_EMOJI, dayMark, hitRates, pct, totalsFor } from '../logic/food';
+import {
+  DEFAULT_MAINTENANCE,
+  MARK_EMOJI,
+  PROTEIN_EMOJI,
+  dayMark,
+  monthStart,
+  periodSummary,
+  proteinMark,
+  totalsFor,
+  type PeriodSummary,
+} from '../logic/food';
+import { weekStart } from '../logic/week';
 import { Sheet, fmtInt, useDb } from './common';
 import { posNum } from './hist-util';
 
@@ -13,53 +26,86 @@ const STATUS: Record<FoodDay['status'], string> = {
   incomplete: 'Marked incomplete',
 };
 
+/** "−1,000 kcal" for a deficit, "+300 kcal" for a surplus. */
+const signedKcal = (deficit: number) => `${deficit >= 0 ? '−' : '+'}${fmtInt(Math.abs(deficit))}`;
+
+function SummaryCard(props: { title: string; s: PeriodSummary }) {
+  const { title, s } = props;
+  return (
+    <div class="card hist-summary">
+      <div class="row">
+        <b class="spacer">{title}</b>
+        <span class="muted hist-small">
+          {s.days} confirmed day{s.days === 1 ? '' : 's'}
+        </span>
+      </div>
+      {s.days === 0 ? (
+        <div class="muted hist-small">No confirmed days yet.</div>
+      ) : (
+        <>
+          <div class="row hist-sum-row">
+            <span class="muted hist-sum-label">{s.deficit >= 0 ? 'Deficit' : 'Surplus'}</span>
+            <span class={'hist-sum-big ' + (s.deficit >= 0 ? 'hist-up' : 'hist-down')}>{signedKcal(s.deficit)} kcal</span>
+            <span class="muted">≈ {Math.abs(s.lbs).toFixed(1)} lb</span>
+          </div>
+          <div class="row hist-sum-row">
+            <span class="muted hist-sum-label">Protein</span>
+            <span>
+              {s.protein.hit} hit · {s.protein.near} within 90% · {s.protein.under} under
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function FoodHistory(props: { today: DayKey }) {
   const { today } = props;
   const data = useDb(() => Promise.all([db.listFoodDays(), db.allFood(), db.getSettings()]), []);
   const [open, setOpen] = useState<DayKey | null>(null);
   if (!data) return null;
   const [days, food, settings] = data;
+  const maintenance = settings.maintenanceKcal ?? DEFAULT_MAINTENANCE;
 
   const byDate = new Map(days.map((d) => [d.date, d]));
   const dates = [...new Set([...days.map((d) => d.date), ...food.map((e) => e.date)])]
     .filter((d) => d <= today)
     .sort((a, b) => b.localeCompare(a));
   const targetsOf = (d: DayKey) => byDate.get(d) ?? { kcalTarget: settings.kcalTarget, proteinTarget: settings.proteinTarget };
-
-  const rateLine = (n: number) => {
-    const r = hitRates(days, food, today, n);
-    if (!r.kcal.of) return `Last ${n} days: —`;
-    return (
-      <>
-        Last {n} days: kcal {pct(r.kcal)}% · protein {pct(r.protein)}%{' '}
-        <span class="muted hist-nowrap">
-          ({r.kcal.of} day{r.kcal.of === 1 ? '' : 's'})
-        </span>
-      </>
-    );
-  };
+  const monthName = new Date(`${today}T12:00:00`).toLocaleDateString('en-US', { month: 'long' });
 
   return (
     <div>
-      <div class="card hist-rates">
-        <div>{rateLine(7)}</div>
-        <div>{rateLine(30)}</div>
-        <div class="muted hist-small">Confirmed days only.</div>
+      <div class="stack">
+        <SummaryCard title="This week" s={periodSummary(days, food, weekStart(today), today, maintenance)} />
+        <SummaryCard title={monthName} s={periodSummary(days, food, monthStart(today), today, maintenance)} />
+        <div class="muted hist-small">
+          vs {fmtInt(maintenance)} kcal/day maintenance, before exercise · confirmed days only
+        </div>
       </div>
       {!dates.length && <p class="muted hist-empty">No food logged yet.</p>}
       <div class="stack hist-days">
         {dates.map((d) => {
           const t = totalsFor(food, d);
-          const tg = targetsOf(d);
+          const fd = byDate.get(d);
+          const status = fd?.status ?? 'open';
           return (
             <button key={d} class="card hist-day" onClick={() => setOpen(d)}>
-              <span class="hist-mark">{MARK_EMOJI[dayMark(byDate.get(d), t)]}</span>
-              <span class="spacer">
-                <span class="hist-day-date">{d === today ? 'Today' : formatDay(d)}</span>
-                <span class="muted hist-small">
-                  {fmtInt(t.kcal)} / {fmtInt(tg.kcalTarget)} kcal · {fmtInt(t.protein)} / {fmtInt(tg.proteinTarget)}g
+              <span class="hist-day-date spacer">{d === today ? 'Today' : formatDay(d)}</span>
+              {status === 'incomplete' ? (
+                <span class="muted">⚪ incomplete</span>
+              ) : (
+                <span class="hist-day-nums">
+                  <span>{fmtInt(t.kcal)} kcal</span>
+                  <span class={status === 'complete' ? (maintenance - t.kcal >= 0 ? 'hist-up' : 'hist-down') : 'muted'}>
+                    {status === 'complete' ? signedKcal(maintenance - t.kcal) : d === today ? 'today' : 'open'}
+                  </span>
+                  <span>
+                    {fmtInt(t.protein)}g {PROTEIN_EMOJI[proteinMark(targetsOf(d).proteinTarget, t.protein)]}
+                  </span>
                 </span>
-              </span>
+              )}
             </button>
           );
         })}

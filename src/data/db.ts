@@ -99,10 +99,21 @@ export async function getSettings(): Promise<Settings> {
 /** Also updates today's FoodDay targets if today is still 'open' (past days keep theirs). */
 export async function setTargets(kcal: number, protein: number): Promise<void> {
   const tx = (await db()).transaction(['settings', 'foodDays'], 'readwrite');
-  await tx.objectStore('settings').put({ id: 'settings', kcalTarget: kcal, proteinTarget: protein });
+  const prev = await tx.objectStore('settings').get('settings');
+  await tx.objectStore('settings').put({ ...prev, id: 'settings', kcalTarget: kcal, proteinTarget: protein });
   const days = tx.objectStore('foodDays');
   const today = await days.get(dayKey());
   if (today && today.status === 'open') await days.put({ ...today, kcalTarget: kcal, proteinTarget: protein });
+  await tx.done;
+  notify();
+}
+
+/** Estimated daily energy use on a sedentary day (TDEE), used for the deficit in History → Food. */
+export async function setMaintenance(kcal: number): Promise<void> {
+  const tx = (await db()).transaction('settings', 'readwrite');
+  const prev = await tx.store.get('settings');
+  if (!prev) throw new Error('Settings missing — call init() first.');
+  await tx.store.put({ ...prev, maintenanceKcal: kcal });
   await tx.done;
   notify();
 }

@@ -121,6 +121,8 @@ export interface Settings {
   id: 'settings';
   kcalTarget: number;
   proteinTarget: number;
+  /** Sedentary-day energy use (TDEE) for the deficit view. Missing in older data → 2,200. */
+  maintenanceKcal?: number;
 }
 
 /** The whole database, as written by Export and read by Import. */

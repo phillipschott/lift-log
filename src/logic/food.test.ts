@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FoodDay, FoodEntry } from '../data/types';
 import { addDays, dayKey } from './dates';
-import { dayMark, hitRates, pct, pendingCloseOuts, totalsFor } from './food';
+import { dayMark, hitRates, monthStart, pct, pendingCloseOuts, periodSummary, proteinMark, totalsFor } from './food';
 
 const T0 = '2026-11-09';
 let n = 0;
@@ -77,5 +77,47 @@ describe('food', () => {
     expect(dayKey(new Date(2026, 10, 10, 0, 30).getTime())).toBe('2026-11-09');
     expect(dayKey(new Date(2026, 10, 10, 2, 59).getTime())).toBe('2026-11-09');
     expect(dayKey(new Date(2026, 10, 10, 3, 0).getTime())).toBe('2026-11-10');
+  });
+});
+
+
+describe('deficit view', () => {
+  it('protein marks: hit at target, within 90% is near, below is under', () => {
+    expect(proteinMark(180, 180)).toBe('hit');
+    expect(proteinMark(180, 172)).toBe('near');
+    expect(proteinMark(180, 162)).toBe('near'); // exactly 90%
+    expect(proteinMark(180, 160)).toBe('under');
+  });
+
+  it('week summary counts confirmed days only, deficit vs maintenance, ≈ lbs', () => {
+    const MON = '2026-11-09';
+    const days = [
+      day(MON, 'complete'),
+      day('2026-11-10', 'complete'),
+      day('2026-11-11', 'complete'),
+      day('2026-11-12', 'open'), // today, still eating
+      day('2026-11-08', 'incomplete'),
+    ];
+    const entries = [
+      entry(MON, 1850, 160),
+      entry('2026-11-10', 2050, 185),
+      entry('2026-11-11', 1700, 172),
+      entry('2026-11-12', 900, 60),
+      entry('2026-11-08', 500, 20),
+    ];
+    const s = periodSummary(days, entries, MON, '2026-11-12', 2200);
+    expect(s.days).toBe(3);
+    expect(s.deficit).toBe(350 + 150 + 500);
+    expect(s.lbs).toBeCloseTo(1000 / 3500);
+    expect(s.protein).toEqual({ hit: 1, near: 1, under: 1 });
+  });
+
+  it('a surplus comes out negative', () => {
+    const s = periodSummary([day(T0, 'complete')], [entry(T0, 2500, 180)], T0, T0, 2200);
+    expect(s.deficit).toBe(-300);
+  });
+
+  it('monthStart', () => {
+    expect(monthStart('2026-11-12')).toBe('2026-11-01');
   });
 });

@@ -6,6 +6,7 @@ import { dayKey } from '../logic/dates';
 import { Sheet, Toast, TopBar, useDb } from './common';
 import { DayEditor, ExercisePicker } from './hist-routine';
 import { posNum } from './hist-util';
+import { DEFAULT_MAINTENANCE } from '../logic/food';
 import './history.css';
 
 export function Settings(props: { onBack: () => void }) {
@@ -53,6 +54,26 @@ export function Settings(props: { onBack: () => void }) {
             onChange={(e) => saveTargets(String(settings.kcalTarget), e.currentTarget.value)}
           />
           <span class="muted hist-unit">g</span>
+        </label>
+        <label class="row hist-target">
+          <span class="spacer">
+            Maintenance
+            <span class="muted hist-small" style={{ display: 'block' }}>
+              sedentary day, for the deficit
+            </span>
+          </span>
+          <input
+            key={`m${settings.maintenanceKcal}`}
+            class="hist-num wide"
+            type="number"
+            inputMode="numeric"
+            defaultValue={String(settings.maintenanceKcal ?? DEFAULT_MAINTENANCE)}
+            onChange={(e) => {
+              const m = posNum(e.currentTarget.value);
+              if (m) db.setMaintenance(Math.round(m));
+            }}
+          />
+          <span class="muted hist-unit">kcal</span>
         </label>
       </div>
 

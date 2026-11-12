@@ -76,7 +76,13 @@ describe('food', () => {
     const days = await db.listFoodDays();
     expect(days.find((d) => d.date === today)).toMatchObject({ kcalTarget: 1800, proteinTarget: 200 });
     expect(days.find((d) => d.date === yesterday)).toMatchObject({ kcalTarget: 2000, proteinTarget: 180 });
-    expect(await db.getSettings()).toEqual({ id: 'settings', kcalTarget: 1800, proteinTarget: 200 });
+    // Other settings (maintenance) are kept, not wiped.
+    expect(await db.getSettings()).toEqual({ id: 'settings', kcalTarget: 1800, proteinTarget: 200, maintenanceKcal: 2200 });
+  });
+
+  it('setMaintenance changes maintenance and keeps the targets', async () => {
+    await db.setMaintenance(2350);
+    expect(await db.getSettings()).toEqual({ id: 'settings', kcalTarget: 2000, proteinTarget: 180, maintenanceKcal: 2350 });
   });
 
   it('closeDay creates a missing day, reopenDay sets it back to open, adding to a closed day keeps it closed', async () => {
