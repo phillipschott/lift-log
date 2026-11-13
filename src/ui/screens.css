@@ -133,3 +133,4 @@ button:disabled { opacity: 0.5; }
 .day-btn.done { background: transparent; border-style: dashed; min-height: var(--tap); font-weight: 500; }
 .day-btn.done .spacer { color: var(--muted); }
 .done-word { color: var(--good); font-size: 15px; font-weight: 600; }
+.closeout-add { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }

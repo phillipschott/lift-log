@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as db from './db';
 import { addDays, dayKey } from '../logic/dates';
+import { pendingCloseOuts } from '../logic/food';
 import type { ExportFile } from './types';
 
 const today = dayKey();
@@ -93,6 +94,28 @@ describe('food', () => {
     expect((await db.listFoodDays())[0].status).toBe('complete');
     await db.reopenDay(yesterday);
     expect((await db.listFoodDays())[0].status).toBe('open');
+  });
+
+  it('bug 2026-11-13: forgot dinner → marked incomplete → Reopen lets you edit, with no close-out prompt', async () => {
+    await db.addFood(yesterday, 1350, 120);
+    await db.closeDay(yesterday, 'incomplete');
+    await db.reopenDay(yesterday);
+    // The prompt must not grab the reopened day, and init() must not auto-close it.
+    expect(pendingCloseOuts(await db.listFoodDays(), await db.allFood(), today).prompt).toHaveLength(0);
+    await db.init();
+    expect((await db.listFoodDays()).find((d) => d.date === yesterday)?.status).toBe('open');
+    // Add the forgotten dinner, then confirm from History: the reopened mark is cleared.
+    await db.addFood(yesterday, 700, 55);
+    await db.closeDay(yesterday, 'complete');
+    const d = (await db.listFoodDays()).find((x) => x.date === yesterday)!;
+    expect(d.status).toBe('complete');
+    expect(d.reopened).toBeUndefined();
+    expect((await db.foodFor(yesterday)).reduce((t, e) => t + e.kcal, 0)).toBe(2050);
+  });
+
+  it('a day you never closed still gets the morning prompt', async () => {
+    await db.addFood(yesterday, 1350, 120);
+    expect(pendingCloseOuts(await db.listFoodDays(), await db.allFood(), today).prompt.map((x) => x.date)).toEqual([yesterday]);
   });
 });
 

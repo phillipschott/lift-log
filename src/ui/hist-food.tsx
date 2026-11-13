@@ -226,8 +226,8 @@ function EntryEditor(props: { entry: FoodEntry; onDone: () => void }) {
   );
 }
 
-/** Add a forgotten entry to a past, still-open day. */
-function AddRow(props: { date: DayKey }) {
+/** Add a forgotten entry to a past, still-open day (History day sheet and the close-out prompt). */
+export function AddRow(props: { date: DayKey }) {
   const [kcal, setKcal] = useState('');
   const [protein, setProtein] = useState('');
   const add = () => {

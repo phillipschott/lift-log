@@ -306,7 +306,7 @@ export async function closeDay(date: DayKey, status: 'complete' | 'incomplete'):
   const days = tx.objectStore('foodDays');
   const day = await days.get(date);
   if (day) {
-    await days.put({ ...day, status });
+    await days.put({ ...day, status, reopened: undefined });
   } else {
     const s = await tx.objectStore('settings').get('settings');
     if (!s) throw new Error('Settings missing — call init() first.');
@@ -315,11 +315,11 @@ export async function closeDay(date: DayKey, status: 'complete' | 'incomplete'):
   await tx.done;
   notify();
 }
-/** Back to 'open' (from History, to fix a mistake). */
+/** Back to 'open' (from History, to fix a mistake). Marked `reopened` so the close-out prompt leaves it alone. */
 export async function reopenDay(date: DayKey): Promise<void> {
   const tx = (await db()).transaction('foodDays', 'readwrite');
   const day = await tx.store.get(date);
-  if (day) await tx.store.put({ ...day, status: 'open' });
+  if (day) await tx.store.put({ ...day, status: 'open', reopened: true });
   await tx.done;
   notify();
 }

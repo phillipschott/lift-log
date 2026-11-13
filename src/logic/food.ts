@@ -32,7 +32,10 @@ export function dayMark(day: FoodDay | undefined, t: Totals): DayMark {
  */
 export function pendingCloseOuts(days: FoodDay[], entries: FoodEntry[], today: DayKey) {
   const withEntries = new Set(entries.map((e) => e.date));
-  const open = days.filter((d) => d.status === 'open' && d.date < today).sort((a, b) => a.date.localeCompare(b.date));
+  // A day you reopened from History is being fixed there — never prompt for it or auto-close it.
+  const open = days
+    .filter((d) => d.status === 'open' && !d.reopened && d.date < today)
+    .sort((a, b) => a.date.localeCompare(b.date));
   return {
     prompt: open.filter((d) => withEntries.has(d.date)),
     autoIncomplete: open.filter((d) => !withEntries.has(d.date)),

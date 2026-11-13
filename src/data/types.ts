@@ -115,6 +115,11 @@ export interface FoodDay {
   status: 'open' | 'complete' | 'incomplete';
   kcalTarget: number;
   proteinTarget: number;
+  /**
+   * Reopened from History to fix it. The close-out prompt skips it (you confirm it from the
+   * History day sheet instead); cleared when the day is closed again.
+   */
+  reopened?: boolean;
 }
 
 export interface Settings {
