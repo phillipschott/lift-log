@@ -91,12 +91,12 @@ describe('food', () => {
     expect(days.find((d) => d.date === today)).toMatchObject({ kcalTarget: 1800, proteinTarget: 200 });
     expect(days.find((d) => d.date === yesterday)).toMatchObject({ kcalTarget: 2000, proteinTarget: 180 });
     // Other settings (maintenance) are kept, not wiped.
-    expect(await db.getSettings()).toEqual({ id: 'settings', kcalTarget: 1800, proteinTarget: 200, maintenanceKcal: 2200 });
+    expect(await db.getSettings()).toMatchObject({ id: 'settings', kcalTarget: 1800, proteinTarget: 200, maintenanceKcal: 2200 });
   });
 
   it('setMaintenance changes maintenance and keeps the targets', async () => {
     await db.setMaintenance(2350);
-    expect(await db.getSettings()).toEqual({ id: 'settings', kcalTarget: 2000, proteinTarget: 180, maintenanceKcal: 2350 });
+    expect(await db.getSettings()).toMatchObject({ id: 'settings', kcalTarget: 2000, proteinTarget: 180, maintenanceKcal: 2350 });
   });
 
   it('closeDay creates a missing day, reopenDay sets it back to open, adding to a closed day keeps it closed', async () => {
@@ -169,7 +169,7 @@ describe('exercises', () => {
     expect(a).toMatchObject({ name: 'Cable Crunch', start: null, swapIds: [] });
     const b = await db.createExercise('cable crunch', 'per-side');
     expect(b.id).toBe(a.id);
-    expect((await db.createExercise('squat', 'total')).id).toBe('squat');
+    expect((await db.createExercise('squat · DUMBBELL', 'total')).id).toBe('squat');
   });
 
   it('mergeExercise moves logs, repoints routine slots / swapIds / plans, deletes the source', async () => {
@@ -195,8 +195,8 @@ describe('exercises', () => {
     const after = await db.listExercises();
     expect(after.find((e) => e.id === dup.id)).toBeUndefined();
     expect(after.find((e) => e.id === 'leg-press')).toBeUndefined();
-    expect(squat.swapIds).toEqual(['leg-press']);
-    expect(after.find((e) => e.id === 'squat')!.swapIds).toEqual([]);
+    expect(squat.swapIds).toEqual(['leg-press', 'leg-press-plate', 'hack-squat']);
+    expect(after.find((e) => e.id === 'squat')!.swapIds).toEqual(['leg-press-plate', 'hack-squat']) // leg-press merged into squat is not its own swap;
   });
 
   it('mergeExercise repoints another exercise’s swapIds', async () => {
@@ -244,3 +244,55 @@ describe('export / import', () => {
     expect(withoutStamp(await db.exportAll())).toEqual(before);
   });
 });
+
+describe('migration: clearer names (2026-11-17)', () => {
+  /** Riley's phone data before the update: original seed names + exercises created on the phone. */
+  async function oldPhoneData(): Promise<ExportFile> {
+    const f = await db.exportAll();
+    const old = Object.fromEntries(Object.entries(db.RENAMES_2026_11).map(([id, [o]]) => [id, o]));
+    f.settings = { ...f.settings, migrations: undefined };
+    f.exercises = f.exercises
+      .filter((e) => e.id !== 'leg-press-plate' && e.id !== 'hack-squat')
+      .map((e) => (old[e.id] ? { ...e, name: old[e.id] } : e))
+      .map((e) => (e.id === 'squat' ? { ...e, swapIds: ['leg-press'] } : e))
+      .map((e) => (e.id === 'flat-press-machine' ? { ...e, mode: 'total' as const, start: { value: 105, mode: 'total' as const } } : e))
+      .map((e) => (e.id === 'cable-row' ? { ...e, name: 'My row' } : e)); // a name Riley changed himself
+    const mk = (id: string, name: string) => ({ id, name, mode: 'total' as const, start: null, swapIds: [], createdAt: 1 });
+    f.exercises.push(mk('u-legpress', 'Leg Press Machine'), mk('u-calf', 'Calf Raise Machine'), mk('u-abd', 'Abduction Machine'));
+    const lg = (id: string, exerciseId: string, value: number) => ({
+      id, workoutId: 'w-' + id, date: yesterday, dayId: 'day3', exerciseId, targetSets: 3, targetReps: 12,
+      sets: [12, 12, 12].map((reps, i) => ({ load: { value, mode: 'total' as const }, reps, at: i })),
+    });
+    f.logs.push(lg('l1', 'u-legpress', 240), lg('l2', 'u-calf', 300), lg('l3', 'u-abd', 110));
+    return f;
+  }
+
+  it('renames, merges the two pairs, adds the plate-loaded leg press + hack squat, keeps user renames', async () => {
+    await db.importAll(await oldPhoneData());
+    await db.init();
+    const ex = await db.listExercises();
+    const name = (id: string) => ex.find((e) => e.id === id)?.name;
+    expect(name('flat-press-machine')).toBe('Chest press · plate-loaded');
+    expect(ex.find((e) => e.id === 'flat-press-machine')?.mode).toBe('per-side');
+    expect(name('triceps-pushdown')).toBe('Triceps pushdown · high pulley');
+    expect(name('cable-pushdown')).toBe('Triceps pushdown · adjustable pulley');
+    expect(name('cable-row')).toBe('My row'); // not overwritten
+    // Merges keep the logged history on the seeded exercise; starting weight comes from the logs.
+    expect(ex.some((e) => e.name === 'Leg Press Machine' || e.name === 'Calf Raise Machine')).toBe(false);
+    expect(name('leg-press')).toBe('Leg press · machine');
+    expect((await db.logsForExercise('leg-press')).map((l) => l.id)).toEqual(['l1']);
+    expect(ex.find((e) => e.id === 'leg-press')?.start).toBe(null);
+    expect((await db.logsForExercise('calf-raise-machine')).map((l) => l.id)).toEqual(['l2']);
+    expect(ex.find((e) => e.name === 'Hip abduction · machine')?.id).toBe('u-abd');
+    // Three separate leg machines as Squat swaps.
+    expect(name('leg-press-plate')).toBe('Leg press · plate-loaded');
+    expect(name('hack-squat')).toBe('Hack squat · plate-loaded');
+    expect(ex.find((e) => e.id === 'squat')?.swapIds).toEqual(['leg-press', 'leg-press-plate', 'hack-squat']);
+    // Runs once.
+    expect((await db.getSettings()).migrations).toEqual(['names-2026-11']);
+    await db.renameExercise('leg-press', 'Leg press · seated stack');
+    await db.init();
+    expect((await db.listExercises()).find((e) => e.id === 'leg-press')?.name).toBe('Leg press · seated stack');
+  });
+});
+

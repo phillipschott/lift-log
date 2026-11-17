@@ -128,6 +128,8 @@ export interface Settings {
   proteinTarget: number;
   /** Sedentary-day energy use (TDEE) for the deficit view. Missing in older data → 2,200. */
   maintenanceKcal?: number;
+  /** One-time data fixes already applied (e.g. 'names-2026-11'). */
+  migrations?: string[];
 }
 
 /** The whole database, as written by Export and read by Import. */

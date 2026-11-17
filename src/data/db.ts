@@ -80,7 +80,106 @@ export async function init(): Promise<void> {
     await t.done;
   }
 
+  await migrateNames2026_11();
   await pruneUnusedExercises(); // notifies
+}
+
+// ---------- one-time migration: clearer exercise names (2026-11-17) ----------
+
+/** id → [original seeded name, new name]. Only renamed if the name is still the original. */
+export const RENAMES_2026_11: Record<string, [string, string]> = {
+  'flat-press-db': ['Flat press (DB)', 'Bench press · dumbbell'],
+  'flat-press-machine': ['Flat press (machine)', 'Chest press · plate-loaded'],
+  'incline-cable-fly': ['Incline cable fly', 'Incline fly · adjustable pulley'],
+  'cable-rope-vertical-raise': ['Cable rope vertical raise', 'Front raise · cable rope'],
+  'cable-lateral-raise': ['Cable lateral raise', 'Lateral raise · cable'],
+  'seated-shoulder-press': ['Seated machine shoulder press', 'Shoulder press · plate-loaded'],
+  'incline-press-machine': ['Incline press (machine)', 'Incline chest press · plate-loaded'],
+  'parallel-bar-dip': ['Parallel bar dip', 'Dip · bodyweight'],
+  'triceps-pushdown': ['Triceps pushdown', 'Triceps pushdown · high pulley'],
+  'triceps-pushdown-alt': ['Triceps pushdown (other machine)', 'Triceps pushdown · other station'],
+  'straight-arm-pulldown': ['Straight-arm pulldown', 'Straight-arm pulldown · cable'],
+  'wide-pulldown': ['Wide pulldown', 'Lat pulldown · plate-loaded'],
+  'rear-delt-cable-pull': ['Rear delt cable pull', 'Rear delt fly · cable'],
+  'cable-row': ['Cable row', 'Seated row · cable'],
+  'face-pulls': ['Face pulls', 'Face pull · cable rope'],
+  'shoulder-shrugs': ['Shoulder shrugs', 'Shrug · dumbbell'],
+  'incline-db-curl': ['Incline DB curl', 'Incline curl · dumbbell'],
+  'hammer-curl': ['Hammer curl', 'Hammer curl · dumbbell'],
+  'leg-extension': ['Leg extension', 'Leg extension · machine'],
+  'hip-thrust': ['Hip thrust', 'Hip thrust · machine'],
+  'romanian-deadlift': ['Romanian deadlift', 'Romanian deadlift · dumbbell'],
+  'leg-curl': ['Leg curl', 'Leg curl · machine'],
+  squat: ['Squat', 'Squat · dumbbell'],
+  'leg-press': ['Leg press', 'Leg press · machine'],
+  'standing-calf-raise': ['Standing calf raise', 'Calf raise · dumbbell'],
+  'calf-raise-machine': ['Calf raise (machine)', 'Calf raise · machine'],
+  'rear-delt-machine': ['Rear delt machine/fly', 'Reverse fly · machine'],
+  'cable-curl': ['Cable curl', 'Curl · adjustable pulley'],
+  'cable-pushdown': ['Cable pushdown', 'Triceps pushdown · adjustable pulley'],
+  'lateral-raise-machine': ['Lateral raise (machine)', 'Lateral raise · machine'],
+  'db-lateral-raise': ['DB lateral raise', 'Lateral raise · dumbbell'],
+  'hanging-leg-raise': ['Hanging leg raises', 'Hanging leg raise'],
+  'high-to-low-cable-fly': ['High-to-low cable fly', 'High-to-low fly · adjustable pulley'],
+};
+
+const MIGRATION_NAMES = 'names-2026-11';
+const norm = (s: string) => s.trim().toLowerCase();
+
+/**
+ * Clearer names (Movement · equipment). Runs once (recorded in settings.migrations):
+ *  1. Merge exercises Riley created on the phone into the seeded one for the same machine:
+ *     "Leg Press Machine" → leg-press (pin stack), "Calf Raise Machine" → calf-raise-machine.
+ *     Their starting weights become "set on first log" so the logged history decides.
+ *  2. Rename "Abduction Machine" → "Hip abduction · machine".
+ *  3. Rename seeded exercises whose name is still the original (user renames are kept).
+ *  4. Flat press (machine) is plate-loaded, logged per side: mode per-side, start from logs.
+ *  5. Add "Leg press · plate-loaded" and "Hack squat · plate-loaded" as swaps for Squat.
+ */
+async function migrateNames2026_11(): Promise<void> {
+  const d = await db();
+  const settings = await d.get('settings', 'settings');
+  if (!settings || settings.migrations?.includes(MIGRATION_NAMES)) return;
+
+  const byName = async (name: string) => (await d.getAll('exercises')).find((e) => norm(e.name) === norm(name));
+  for (const [userName, seededId] of [
+    ['Leg Press Machine', 'leg-press'],
+    ['Calf Raise Machine', 'calf-raise-machine'],
+  ] as const) {
+    const mine = await byName(userName);
+    const seeded = await d.get('exercises', seededId);
+    if (mine && seeded && mine.id !== seededId) {
+      await mergeExercise(mine.id, seededId);
+      await d.put('exercises', { ...seeded, start: null, mode: mine.mode });
+    }
+  }
+  const abduction = await byName('Abduction Machine');
+  if (abduction) await d.put('exercises', { ...abduction, name: 'Hip abduction · machine' });
+
+  const tx = d.transaction(['exercises', 'settings'], 'readwrite');
+  const exs = tx.objectStore('exercises');
+  for (const [id, [oldName, newName]] of Object.entries(RENAMES_2026_11)) {
+    const ex = await exs.get(id);
+    if (ex && norm(ex.name) === norm(oldName)) await exs.put({ ...ex, name: newName });
+  }
+  const chest = await exs.get('flat-press-machine');
+  if (chest && chest.mode !== 'per-side') await exs.put({ ...chest, mode: 'per-side', start: null });
+  const now = Date.now();
+  for (const add of [
+    { id: 'leg-press-plate', name: 'Leg press · plate-loaded' },
+    { id: 'hack-squat', name: 'Hack squat · plate-loaded' },
+  ]) {
+    if (!(await exs.get(add.id))) await exs.put({ ...add, mode: 'per-side', start: null, swapIds: [], createdAt: now });
+  }
+  const squat = await exs.get('squat');
+  if (squat) {
+    const swapIds = [...new Set([...squat.swapIds, 'leg-press-plate', 'hack-squat'])];
+    await exs.put({ ...squat, swapIds });
+  }
+  const s = await tx.objectStore('settings').get('settings');
+  if (s) await tx.objectStore('settings').put({ ...s, migrations: [...(s.migrations ?? []), MIGRATION_NAMES] });
+  await tx.done;
+  notify();
 }
 
 /** Called after every write. Returns an unsubscribe function. */
