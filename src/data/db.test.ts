@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as db from './db';
 import { addDays, dayKey } from '../logic/dates';
 import { pendingCloseOuts } from '../logic/food';
@@ -7,6 +7,19 @@ import type { ExportFile } from './types';
 
 const today = dayKey();
 const yesterday = addDays(today, -1);
+
+/** Log food as if it were entered on that day itself (moves the clock to noon that day). */
+async function addOnTheDay(date: string, kcal: number, protein: number) {
+  const [y, m, d] = date.split('-').map(Number);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(y, m - 1, d, 12));
+  try {
+    return await db.addFood(date, kcal, protein);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+afterEach(() => vi.useRealTimers());
 
 beforeEach(async () => {
   await db.clearAll();
@@ -35,9 +48,9 @@ describe('init', () => {
 
   it('auto-closes a past open day with no entries, but leaves one with entries open', async () => {
     const empty = addDays(today, -2);
-    const e = await db.addFood(empty, 100, 10);
+    const e = await addOnTheDay(empty, 100, 10);
     await db.deleteFood(e.id);
-    await db.addFood(yesterday, 500, 40);
+    await addOnTheDay(yesterday, 500, 40);
     await db.init();
     const days = await db.listFoodDays();
     expect(days.find((d) => d.date === empty)?.status).toBe('incomplete');
@@ -97,7 +110,7 @@ describe('food', () => {
   });
 
   it('bug 2026-11-13: forgot dinner → marked incomplete → Reopen lets you edit, with no close-out prompt', async () => {
-    await db.addFood(yesterday, 1350, 120);
+    await addOnTheDay(yesterday, 1350, 120);
     await db.closeDay(yesterday, 'incomplete');
     await db.reopenDay(yesterday);
     // The prompt must not grab the reopened day, and init() must not auto-close it.
@@ -113,8 +126,18 @@ describe('food', () => {
     expect((await db.foodFor(yesterday)).reduce((t, e) => t + e.kcal, 0)).toBe(2050);
   });
 
+  it('forgot a whole day: adding food to it later from History never triggers the prompt', async () => {
+    const twoAgo = addDays(today, -2);
+    // Nothing logged that day; add it now from History.
+    await db.addFood(twoAgo, 2000, 170);
+    expect(pendingCloseOuts(await db.listFoodDays(), await db.allFood(), today).prompt).toHaveLength(0);
+    expect((await db.listFoodDays()).find((d) => d.date === twoAgo)).toMatchObject({ status: 'open', reopened: true });
+    await db.closeDay(twoAgo, 'complete');
+    expect((await db.listFoodDays()).find((d) => d.date === twoAgo)?.status).toBe('complete');
+  });
+
   it('a day you never closed still gets the morning prompt', async () => {
-    await db.addFood(yesterday, 1350, 120);
+    await addOnTheDay(yesterday, 1350, 120);
     expect(pendingCloseOuts(await db.listFoodDays(), await db.allFood(), today).prompt.map((x) => x.date)).toEqual([yesterday]);
   });
 });

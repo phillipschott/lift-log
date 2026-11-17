@@ -283,7 +283,10 @@ export async function addFood(date: DayKey, kcal: number, protein: number): Prom
   if (!(await days.get(date))) {
     const s = await tx.objectStore('settings').get('settings');
     if (!s) throw new Error('Settings missing — call init() first.');
-    await days.put({ date, status: 'open', kcalTarget: s.kcalTarget, proteinTarget: s.proteinTarget });
+    // A brand-new past day can only come from History (filling in a forgotten day): mark it
+    // `reopened` so the morning close-out prompt leaves it to you to Confirm there.
+    const past = date < dayKey();
+    await days.put({ date, status: 'open', kcalTarget: s.kcalTarget, proteinTarget: s.proteinTarget, ...(past ? { reopened: true } : {}) });
   }
   await tx.done;
   notify();

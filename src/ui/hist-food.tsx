@@ -4,7 +4,7 @@
 import { useState } from 'preact/hooks';
 import type { DayKey, FoodDay, FoodEntry } from '../data/types';
 import * as db from '../data/db';
-import { formatDay } from '../logic/dates';
+import { addDays, formatDay } from '../logic/dates';
 import {
   DEFAULT_MAINTENANCE,
   MARK_EMOJI,
@@ -69,9 +69,15 @@ export function FoodHistory(props: { today: DayKey }) {
   const maintenance = settings.maintenanceKcal ?? DEFAULT_MAINTENANCE;
 
   const byDate = new Map(days.map((d) => [d.date, d]));
-  const dates = [...new Set([...days.map((d) => d.date), ...food.map((e) => e.date)])]
-    .filter((d) => d <= today)
-    .sort((a, b) => b.localeCompare(a));
+  // Every day from the first food record to today — including days with nothing logged, so a
+  // forgotten day can still be filled in.
+  const known = [...days.map((d) => d.date), ...food.map((e) => e.date)].filter((d) => d <= today);
+  const dates: DayKey[] = [];
+  if (known.length) {
+    const first = known.reduce((a, b) => (a < b ? a : b));
+    for (let d = today; d >= first; d = addDays(d, -1)) dates.push(d);
+  }
+  const hasFood = new Set(food.map((e) => e.date));
   const targetsOf = (d: DayKey) => byDate.get(d) ?? { kcalTarget: settings.kcalTarget, proteinTarget: settings.proteinTarget };
   const monthName = new Date(`${today}T12:00:00`).toLocaleDateString('en-US', { month: 'long' });
 
@@ -93,7 +99,9 @@ export function FoodHistory(props: { today: DayKey }) {
           return (
             <button key={d} class="card hist-day" onClick={() => setOpen(d)}>
               <span class="hist-day-date spacer">{d === today ? 'Today' : formatDay(d)}</span>
-              {status === 'incomplete' ? (
+              {!hasFood.has(d) ? (
+                <span class="muted">— nothing logged · tap to add</span>
+              ) : status === 'incomplete' ? (
                 <span class="muted">⚪ incomplete</span>
               ) : (
                 <span class="hist-day-nums">
@@ -172,7 +180,8 @@ function DaySheet(props: {
         </ul>
       )}
 
-      {status === 'open' && date < props.today && <AddRow date={date} />}
+      {/* Past day: add while it's open, or straight away if nothing was logged (it reopens itself). */}
+      {date < props.today && (status === 'open' || entries.length === 0) && <AddRow date={date} reopenFirst={status !== 'open'} />}
 
       <div class="stack hist-sheet-actions">
         {status !== 'open' ? (
@@ -227,14 +236,14 @@ function EntryEditor(props: { entry: FoodEntry; onDone: () => void }) {
 }
 
 /** Add a forgotten entry to a past, still-open day (History day sheet and the close-out prompt). */
-export function AddRow(props: { date: DayKey }) {
+export function AddRow(props: { date: DayKey; reopenFirst?: boolean }) {
   const [kcal, setKcal] = useState('');
   const [protein, setProtein] = useState('');
   const add = () => {
     const k = posNum(kcal) ?? 0;
     const p = posNum(protein) ?? 0;
     if (!k && !p) return;
-    db.addFood(props.date, k, p).then(() => {
+    (props.reopenFirst ? db.reopenDay(props.date) : Promise.resolve()).then(() => db.addFood(props.date, k, p)).then(() => {
       setKcal('');
       setProtein('');
     });
