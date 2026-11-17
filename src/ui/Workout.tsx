@@ -363,7 +363,7 @@ function ExerciseCard(props: {
   const showActive = sets.length < slot.sets || extra;
   const future = Math.max(0, slot.sets - sets.length - 1);
   const short = (s: SetLog) => s.reps < slot.reps;
-  const lighter = (s: SetLog) => !!before.working && s.load.value < before.working.value;
+  const lighter = (s: SetLog) => !!before.working && s.load.mode === before.working.mode && s.load.value < before.working.value;
   const complete = sets.length >= slot.sets;
 
   return (

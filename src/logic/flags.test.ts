@@ -297,3 +297,26 @@ describe('skeptic review fixes (2026-11-10)', () => {
     expect(flagHint(computeFlagState(base50, [], T0), 3, 10)).toBe(null);
   });
 });
+
+describe('units (bug 2026-11-16)', () => {
+  const tot = (value: number): Load => ({ value, mode: 'total' });
+  it('a machine seeded as 105 total but logged as 50/50 adopts 50/50 — no ↓, no drop-back', () => {
+    const base105 = { load: tot(105), date: T0 };
+    const st = computeFlagState(base105, [log(T0, ps(50), [10, 10, 10, 10])], T0);
+    expect(st.working).toEqual(ps(50));
+    expect(st.flag).toBe(null);
+    expect(st.streak).toBe(1); // that full session counts as the first hit at 50/50
+    // A second full 50/50 session in a row → Up it.
+    const st2 = computeFlagState(base105, [log(T0, ps(50), [10, 10, 10, 10]), log(week(1), ps(50), [10, 10, 10, 10])], week(1));
+    expect(st2.flag).toBe('up');
+    // While the working weight is still 105 total, a 50/50 first set never triggers a drop-back.
+    expect(dropBackTo(computeFlagState(base105, [], T0), [{ load: ps(50), reps: 6, at: 1 }], 10)).toBe(null);
+  });
+
+  it('same number in different units is not the same weight', () => {
+    const st = computeFlagState(base50, [log(T0, tot(50), [10, 10, 10])], T0);
+    expect(st.working).toEqual(tot(50));
+    expect(st.flag).toBe(null);
+  });
+});
+

@@ -14,6 +14,9 @@
 //  6. 🔵 Attempting = a real attempt at this weight, not hit yet.
 //  7. 🟠 Stalled = 3 sessions in a row at the weight with no new best in total reps.
 //  8. Per-day flags only for a slot with its own per-day starting weight (Day 4 incline @ 35/35).
+//  9. Units matter: per-side, total and bodyweight loads are never compared. A session whose
+//     first set is in different units from the working weight makes that load the new
+//     starting weight (owned, streak 0) — e.g. a machine seeded as 105 total, logged as 50/50.
 
 import type { DayKey, Exercise, ExerciseLog, Load, SetLog, Slot } from '../data/types';
 
@@ -43,7 +46,7 @@ export interface Baseline {
 }
 
 const heavier = (a: Load, b: Load) => a.value > b.value;
-const same = (a: Load, b: Load) => a.value === b.value;
+const same = (a: Load, b: Load) => a.value === b.value && a.mode === b.mode;
 
 function initial(b: Baseline): FlagState {
   return {
@@ -63,7 +66,7 @@ function initial(b: Baseline): FlagState {
  * lighter than the working weight (lighter warm-ups are skipped), if that set is heavier.
  */
 function attemptLoad(sets: SetLog[], w: Load): Load | null {
-  const first = sets.find((s) => !heavier(w, s.load));
+  const first = sets.find((s) => s.load.mode === w.mode && !heavier(w, s.load));
   return first && heavier(first.load, w) ? first.load : null;
 }
 
@@ -102,6 +105,17 @@ export function applyLog(st: FlagState, log: ExerciseLog): FlagState {
     // "Set on first log": the first weight you log is your starting (owned) weight.
     s.working = s.owned = log.sets[0].load;
     s.since = log.date;
+  }
+
+  const first = log.sets[0].load;
+  if (first.mode !== s.working!.mode) {
+    // Logged in different units: not comparable, so this becomes the new starting weight.
+    s.working = s.owned = first;
+    s.attempting = false;
+    s.streak = 0;
+    s.upIt = false;
+    s.since = log.date;
+    s.totals = [];
   }
 
   const n = attemptLoad(log.sets, s.working!);

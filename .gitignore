@@ -4,3 +4,4 @@ dist
 .claude
 fitness-app-spec.md
 DECISIONS.md
+lift-log-*.json
