@@ -3,7 +3,7 @@ import { useState } from 'preact/hooks';
 import type { Exercise, ExerciseLog } from '../data/types';
 import * as db from '../data/db';
 import { dayKey, formatDay } from '../logic/dates';
-import { formatLoad, stateForSlot } from '../logic/flags';
+import { formatLoad, liftSummary } from '../logic/flags';
 import { Sheet, TopBar, useDb } from './common';
 import { SetSheet } from './Workout';
 import { WeightChart } from './hist-chart';
@@ -70,10 +70,12 @@ function LiftList(props: { exercises: Exercise[]; logs: ExerciseLog[]; today: st
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((ex) => {
       const logs = byEx.get(ex.id)!;
-      const start = ex.start ?? byDate(logs)[0].sets[0].load;
-      const current = stateForSlot(ex, undefined, undefined, logs, props.today).working;
-      const change = current ? signed(current.value - start.value) : '';
-      return { ex, text: `${formatLoad(start)} → ${formatLoad(current)}`, change };
+      const { start, current, trying, change } = liftSummary(ex, logs, props.today);
+      return {
+        ex,
+        text: `${formatLoad(start)} → ${formatLoad(current)}${trying ? ` · trying ${formatLoad(trying)}` : ''}`,
+        change: change === null ? '' : signed(change),
+      };
     });
 
   if (!rows.length) return <p class="muted hist-empty">No lifts logged yet.</p>;
@@ -83,7 +85,8 @@ function LiftList(props: { exercises: Exercise[]; logs: ExerciseLog[]; today: st
         <button key={r.ex.id} class="card hist-lift" onClick={() => props.onPick(r.ex.id)}>
           <span class="hist-lift-name">{r.ex.name}</span>
           <span class="hist-lift-load">
-            {r.text} <span class={r.change.startsWith('+') ? 'hist-up' : r.change.startsWith('−') ? 'hist-down' : 'muted'}>({r.change})</span>
+            {r.text}{' '}
+            {r.change && r.change !== '±0' && <span class={r.change.startsWith('+') ? 'hist-up' : 'hist-down'}>({r.change})</span>}
           </span>
         </button>
       ))}

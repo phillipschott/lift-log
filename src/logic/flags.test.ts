@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ExerciseLog, Load } from '../data/types';
 import { buildSeed } from '../data/seed';
 import { addDays } from './dates';
-import { computeFlagState, dropBackTo, flagHint, formatLoad, slotLogs, stateForSlot } from './flags';
+import { computeFlagState, dropBackTo, flagHint, formatLoad, liftSummary, slotLogs, stateForSlot } from './flags';
 
 const ps = (value: number): Load => ({ value, mode: 'per-side' });
 const T0 = '2026-11-09';
@@ -317,6 +317,40 @@ describe('units (bug 2026-11-16)', () => {
     const st = computeFlagState(base50, [log(T0, tot(50), [10, 10, 10])], T0);
     expect(st.working).toEqual(tot(50));
     expect(st.flag).toBe(null);
+  });
+});
+
+describe('History lift rows (bug 2026-11-17)', () => {
+  const tot = (value: number): Load => ({ value, mode: 'total' });
+  const ex = (start: Load | null) => ({ id: 'x', name: 'X', mode: start?.mode ?? 'total', start, swapIds: [], createdAt: 0 });
+
+  it('incline cable fly: one full set at 15/15 then dropping to 10/10 is not an attempt', () => {
+    const fly = ex(ps(13));
+    const logs = [log(T0, [ps(15), ps(10), ps(10)], [12, 12, 12], { targetSets: 3 })];
+    logs[0].targetReps = 12;
+    const st = computeFlagState({ load: ps(13), date: T0 }, logs, T0);
+    expect(st.working).toEqual(ps(13));
+    expect(st.flag).toBe(null);
+    const sum = liftSummary(fly, logs, T0);
+    expect(sum.current).toEqual(ps(13));
+    expect(sum.change).toBe(0);
+    expect(sum.trying).toBe(null);
+  });
+
+  it('an attempted weight shows as "trying", not as the current weight', () => {
+    const logs = [log(T0, ps(55), [10, 10, 7])];
+    const sum = liftSummary(ex(ps(50)), logs, T0);
+    expect(sum.current).toEqual(ps(50));
+    expect(sum.trying).toEqual(ps(55));
+    expect(sum.change).toBe(0);
+  });
+
+  it('flat press machine: seeded 105 total, logged 50/50 → start 50/50, no −55', () => {
+    const logs = [log(T0, ps(50), [10, 10, 10, 10]), log(week(1), ps(50), [10, 10, 10, 10])];
+    const sum = liftSummary(ex(tot(105)), logs, week(1));
+    expect(sum.start).toEqual(ps(50));
+    expect(sum.current).toEqual(ps(50));
+    expect(sum.change).toBe(0);
   });
 });
 

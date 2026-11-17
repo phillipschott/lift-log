@@ -5,7 +5,7 @@ import { useState } from 'preact/hooks';
 import type { DayKey, Exercise, ExerciseLog } from '../data/types';
 import * as db from '../data/db';
 import { daysBetween } from '../logic/dates';
-import { formatLoad, stateForSlot } from '../logic/flags';
+import { formatLoad, liftSummary } from '../logic/flags';
 import {
   boxingPerWeek,
   firstRecordDate,
@@ -19,7 +19,7 @@ import {
 } from '../logic/progress';
 import { BOXING_PER_WEEK } from '../logic/week';
 import { useDb } from './common';
-import { byDate, shortDay, signed } from './hist-util';
+import { shortDay, signed } from './hist-util';
 
 const RANGE_KEY = 'lift-log.progress-range';
 
@@ -210,15 +210,14 @@ function WeekAxis(props: { weeks: DayKey[]; today: DayKey }) {
 function LiftRows(props: { exercises: Exercise[]; logs: ExerciseLog[]; from: DayKey; today: DayKey; onPick: (id: string) => void }) {
   const { today } = props;
   const exById = new Map(props.exercises.map((e) => [e.id, e]));
-  const rows = topWeightSeries(props.logs, props.from)
+  const rows = topWeightSeries(props.logs, props.from, exById)
     .filter((s) => exById.has(s.exerciseId))
     .map((s) => {
       const ex = exById.get(s.exerciseId)!;
       const logs = props.logs.filter((l) => l.exerciseId === ex.id && l.sets.length);
-      const start = ex.start ?? byDate(logs)[0].sets[0].load;
-      const current = stateForSlot(ex, undefined, undefined, logs, today).working;
-      const change = current ? signed(current.value - start.value) : '';
-      return { ex, s, start, current, change };
+      // Owned weight (not one you're only attempting); start/change only in matching units.
+      const { start, current, trying, change } = liftSummary(ex, logs, today);
+      return { ex, s, start, current, trying, change: change === null ? '' : signed(change) };
     });
   if (!rows.length) return <p class="muted prog-empty">No lifts logged yet.</p>;
 
@@ -236,6 +235,7 @@ function LiftRows(props: { exercises: Exercise[]; logs: ExerciseLog[]; from: Day
             <span class="prog-lift-load">
               {formatLoad(r.start)} → <b>{formatLoad(r.current)}</b>{' '}
               {r.change && r.change !== '±0' && <span class={r.change.startsWith('+') ? 'hist-up' : 'hist-down'}>{r.change}</span>}
+              {r.trying && <span class="muted"> · trying {formatLoad(r.trying)}</span>}
             </span>
           </span>
           <Spark points={r.s.points} from={props.from} today={today} />

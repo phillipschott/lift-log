@@ -126,3 +126,18 @@ describe('firstRecordDate', () => {
     ).toBe('2026-02-05');
   });
 });
+
+describe('topWeightSeries with exercises (owned weight)', () => {
+  it('one heavier set then lighter sets does not show as progress', () => {
+    const ps = (value: number) => ({ value, mode: 'per-side' as const });
+    const fly = { id: 'fly', name: 'Incline cable fly', mode: 'per-side' as const, start: ps(13), swapIds: [], createdAt: 0 };
+    const logs = [
+      { id: 'a', workoutId: 'w', date: '2026-11-09', dayId: 'day1', exerciseId: 'fly', targetSets: 3, targetReps: 12,
+        sets: [ps(13), ps(13), ps(13)].map((load, i) => ({ load, reps: 12, at: i })) },
+      { id: 'b', workoutId: 'w2', date: '2026-11-16', dayId: 'day1', exerciseId: 'fly', targetSets: 3, targetReps: 12,
+        sets: [ps(15), ps(10), ps(10)].map((load, i) => ({ load, reps: 12, at: i })) },
+    ];
+    const [s] = topWeightSeries(logs, '2026-11-01', new Map([['fly', fly]]));
+    expect(s.points.map((p) => p.load.value)).toEqual([13, 13]);
+  });
+});

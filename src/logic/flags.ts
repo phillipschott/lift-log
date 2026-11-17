@@ -70,10 +70,14 @@ function attemptLoad(sets: SetLog[], w: Load): Load | null {
   return first && heavier(first.load, w) ? first.load : null;
 }
 
-/** The first two sets at the new weight both hit target reps. */
-export function isRealAttempt(sets: SetLog[], n: Load, targetReps: number): boolean {
+/**
+ * Real attempt = the first two sets at the new weight both hit target reps. One full set and then
+ * a switch to a lighter weight is NOT an attempt (only one set for a 1-set lift).
+ */
+export function isRealAttempt(sets: SetLog[], n: Load, targetReps: number, targetSets = 2): boolean {
+  const need = Math.min(2, Math.max(1, targetSets));
   const firstTwo = sets.filter((s) => same(s.load, n)).slice(0, 2);
-  return firstTwo.length > 0 && firstTwo.every((s) => s.reps >= targetReps);
+  return firstTwo.length >= need && firstTwo.every((s) => s.reps >= targetReps);
 }
 
 function scoreAtWorking(st: FlagState, log: ExerciseLog): void {
@@ -120,7 +124,7 @@ export function applyLog(st: FlagState, log: ExerciseLog): FlagState {
 
   const n = attemptLoad(log.sets, s.working!);
   if (n) {
-    if (!(log.keepHeavier || isRealAttempt(log.sets, n, log.targetReps))) {
+    if (!(log.keepHeavier || isRealAttempt(log.sets, n, log.targetReps, log.targetSets))) {
       return s; // dropped back: nothing changes, 🟢 Up it stays on for next time
     }
     s.owned = s.attempting ? s.owned : s.working;
@@ -217,6 +221,36 @@ export function flagHint(st: FlagState, targetSets: number, targetReps: number):
       return `hit ${Array(targetSets).fill(targetReps).join(',')} to own it`;
   }
   return st.streak >= 1 ? `✓ Own ${formatLoad(st.working)} · once more → Up it` : null;
+}
+
+export interface LiftSummary {
+  /** Where the lift started, in the same units as `current` when possible. */
+  start: Load | null;
+  /** The weight you OWN (not one you're only attempting). */
+  current: Load | null;
+  /** A heavier weight you're attempting, if any. */
+  trying: Load | null;
+  /** current − start, only when both are in the same units. */
+  change: number | null;
+}
+
+/**
+ * For History's lift rows: start → owned weight (+change), plus "trying" when Attempting.
+ * Never compares different units (e.g. a machine seeded as 105 total but logged as 50/50).
+ */
+export function liftSummary(ex: Exercise, logs: ExerciseLog[], today: DayKey): LiftSummary {
+  const st = stateForSlot(ex, undefined, undefined, logs, today);
+  const current = st.owned ?? st.working;
+  const trying = st.attempting ? st.working : null;
+  let start: Load | null = ex.start;
+  if (current && (!start || start.mode !== current.mode)) {
+    const firstInUnits = sortLogs(logs)
+      .flatMap((l) => l.sets)
+      .find((s) => s.load.mode === current.mode);
+    start = firstInUnits?.load ?? current;
+  }
+  const change = start && current && start.mode === current.mode ? current.value - start.value : null;
+  return { start, current, trying, change };
 }
 
 /** The most recent log, for the "Last: 50/50 — 10, 10, 7" line. */

@@ -5,7 +5,8 @@
 //  - Macros per week: 'complete' FoodDays hitting protein / at-or-under kcal, using that day's targets.
 //  - Lifts: per exercise, each session's top weight within the range.
 
-import type { DayKey, ExerciseLog, FoodDay, FoodEntry, Load, Workout } from '../data/types';
+import { computeFlagState } from './flags';
+import type { DayKey, ExerciseLog, FoodDay, FoodEntry, Load, Workout, Exercise } from '../data/types';
 import { addDays } from './dates';
 import { hits, totalsFor } from './food';
 import { weekStart } from './week';
@@ -110,8 +111,10 @@ export interface ExerciseSeries {
 /**
  * One series per exercise that has logged sets, most recently trained first (ties by id).
  * Points are limited to sessions on/after `from`; lastDate is over all sessions.
+ * With `exercises`, each point is the weight you OWN after that session (so one heavier set,
+ * or a weight you're only attempting, never shows as progress); without it, the session's top set.
  */
-export function topWeightSeries(logs: ExerciseLog[], from: DayKey): ExerciseSeries[] {
+export function topWeightSeries(logs: ExerciseLog[], from: DayKey, exercises?: Map<string, Exercise>): ExerciseSeries[] {
   const byEx = new Map<string, ExerciseLog[]>();
   for (const l of logs) {
     if (!l.sets.length) continue;
@@ -123,12 +126,19 @@ export function topWeightSeries(logs: ExerciseLog[], from: DayKey): ExerciseSeri
   for (const [exerciseId, ls] of byEx) {
     const sorted = [...ls].sort((a, b) => a.date.localeCompare(b.date) || (a.sets[0]?.at ?? 0) - (b.sets[0]?.at ?? 0));
     const points: SeriesPoint[] = [];
-    for (const l of sorted) {
-      if (l.date < from) continue;
+    const ex = exercises?.get(exerciseId);
+    sorted.forEach((l, i) => {
+      if (l.date < from) return;
+      if (ex) {
+        const st = computeFlagState({ load: ex.start, date: sorted[0].date }, sorted.slice(0, i + 1));
+        const owned = st.owned ?? st.working;
+        if (owned) points.push({ date: l.date, load: owned });
+        return;
+      }
       let top = l.sets[0].load;
       for (const s of l.sets) if (s.load.value > top.value) top = s.load;
       points.push({ date: l.date, load: top });
-    }
+    });
     out.push({ exerciseId, points, lastDate: sorted[sorted.length - 1].date });
   }
   return out.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.exerciseId.localeCompare(b.exerciseId));
