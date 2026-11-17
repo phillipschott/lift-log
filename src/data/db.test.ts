@@ -289,10 +289,35 @@ describe('migration: clearer names (2026-11-17)', () => {
     expect(name('hack-squat')).toBe('Hack squat · plate-loaded');
     expect(ex.find((e) => e.id === 'squat')?.swapIds).toEqual(['leg-press', 'leg-press-plate', 'hack-squat']);
     // Runs once.
-    expect((await db.getSettings()).migrations).toEqual(['names-2026-11']);
+    expect((await db.getSettings()).migrations).toEqual(['names-2026-11', 'names-2026-11b']);
     await db.renameExercise('leg-press', 'Leg press · seated stack');
     await db.init();
     expect((await db.listExercises()).find((e) => e.id === 'leg-press')?.name).toBe('Leg press · seated stack');
+  });
+});
+
+describe('migration: two phone-created exercises (2026-11-17b)', () => {
+  it('merges "wide pull down (plates)" into Lat pulldown · plate-loaded and renames the curl machine', async () => {
+    const f = await db.exportAll();
+    f.settings = { ...f.settings, migrations: ['names-2026-11'] };
+    const mk = (id: string, name: string) => ({ id, name, mode: 'per-side' as const, start: null, swapIds: [], createdAt: 1 });
+    f.exercises.push(mk('u-wide', 'Wide Pull Down (plates)'), mk('u-curl', 'dumbbell curl machine (plates)'));
+    f.logs.push({
+      id: 'lw', workoutId: 'ww', date: yesterday, dayId: 'day2', exerciseId: 'u-wide', targetSets: 4, targetReps: 10,
+      sets: [10, 10, 10, 10].map((reps, i) => ({ load: { value: 70, mode: 'per-side' as const }, reps, at: i })),
+    });
+    f.logs.push({
+      id: 'lc', workoutId: 'ww', date: yesterday, dayId: 'day2', exerciseId: 'u-curl', targetSets: 3, targetReps: 10,
+      sets: [10, 10, 10].map((reps, i) => ({ load: { value: 25, mode: 'per-side' as const }, reps, at: i })),
+    });
+    await db.importAll(f);
+    await db.init();
+    const ex = await db.listExercises();
+    expect(ex.find((e) => e.id === 'u-wide')).toBeUndefined();
+    expect(ex.find((e) => e.id === 'wide-pulldown')).toMatchObject({ name: 'Lat pulldown · plate-loaded', start: null });
+    expect((await db.logsForExercise('wide-pulldown')).map((l) => l.id)).toEqual(['lw']);
+    expect(ex.find((e) => e.id === 'u-curl')?.name).toBe('Preacher curl · plate-loaded');
+    expect((await db.getSettings()).migrations).toEqual(['names-2026-11', 'names-2026-11b']);
   });
 });
 

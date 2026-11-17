@@ -81,7 +81,40 @@ export async function init(): Promise<void> {
   }
 
   await migrateNames2026_11();
+  await migrateNames2026_11b();
   await pruneUnusedExercises(); // notifies
+}
+
+// ---------- one-time migration: two exercises Riley created on the phone (2026-11-17) ----------
+
+const MIGRATION_NAMES_B = 'names-2026-11b';
+/** Ignore case, spaces and punctuation: "Wide pull down (plates)" ≈ "widepulldownplates". */
+const loose = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * "wide pull down (plates)" → merged into the seeded Lat pulldown · plate-loaded (its logs decide
+ * the starting weight); "dumbbell curl machine (plates)" → "Preacher curl · plate-loaded". Runs once.
+ */
+async function migrateNames2026_11b(): Promise<void> {
+  const d = await db();
+  const settings = await d.get('settings', 'settings');
+  if (!settings || settings.migrations?.includes(MIGRATION_NAMES_B)) return;
+  const find = async (name: string) => (await d.getAll('exercises')).find((e) => loose(e.name) === loose(name));
+
+  const wide = await find('wide pull down (plates)');
+  const lat = await d.get('exercises', 'wide-pulldown');
+  if (wide && lat && wide.id !== lat.id) {
+    await mergeExercise(wide.id, lat.id);
+    await d.put('exercises', { ...lat, name: 'Lat pulldown · plate-loaded', start: null, mode: wide.mode });
+  } else if (wide) {
+    await d.put('exercises', { ...wide, name: 'Lat pulldown · plate-loaded' });
+  }
+  const curl = await find('dumbbell curl machine (plates)');
+  if (curl) await d.put('exercises', { ...curl, name: 'Preacher curl · plate-loaded' });
+
+  const s = await d.get('settings', 'settings');
+  if (s) await d.put('settings', { ...s, migrations: [...(s.migrations ?? []), MIGRATION_NAMES_B] });
+  notify();
 }
 
 // ---------- one-time migration: clearer exercise names (2026-11-17) ----------

@@ -158,7 +158,7 @@ export function buildSeed(today: DayKey, now: number): ExportFile {
     app: 'lift-log',
     version: 1,
     exportedAt: now,
-    settings: { id: 'settings', kcalTarget: 2000, proteinTarget: 180, maintenanceKcal: 2200, migrations: ['names-2026-11'] },
+    settings: { id: 'settings', kcalTarget: 2000, proteinTarget: 180, maintenanceKcal: 2200, migrations: ['names-2026-11', 'names-2026-11b'] },
     routine: { id: 'routine', days: structuredClone(DAYS) },
     exercises,
     workouts: [workout],
