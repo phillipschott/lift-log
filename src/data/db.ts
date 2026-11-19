@@ -82,7 +82,39 @@ export async function init(): Promise<void> {
 
   await migrateNames2026_11();
   await migrateNames2026_11b();
+  await migrateNames2026_11c();
   await pruneUnusedExercises(); // notifies
+}
+
+// ---------- one-time migration: leftover phone names (2026-11-18) ----------
+
+const MIGRATION_NAMES_C = 'names-2026-11c';
+/**
+ * The 11-17 merge needed the seeded counterpart to exist; on Riley's phone it had already been
+ * cleaned up, so "Leg Press Machine" / "Calf Raise Machine" kept their old names. Merge if the
+ * counterpart exists, otherwise just rename. Runs once.
+ */
+async function migrateNames2026_11c(): Promise<void> {
+  const d = await db();
+  const settings = await d.get('settings', 'settings');
+  if (!settings || settings.migrations?.includes(MIGRATION_NAMES_C)) return;
+  for (const [userName, seededId, newName] of [
+    ['Leg Press Machine', 'leg-press', 'Leg press · machine'],
+    ['Calf Raise Machine', 'calf-raise-machine', 'Calf raise · machine'],
+  ] as const) {
+    const mine = (await d.getAll('exercises')).find((e) => loose(e.name) === loose(userName));
+    if (!mine) continue;
+    const seeded = await d.get('exercises', seededId);
+    if (seeded && seeded.id !== mine.id) {
+      await mergeExercise(mine.id, seededId);
+      await d.put('exercises', { ...seeded, name: newName, start: null, mode: mine.mode });
+    } else {
+      await d.put('exercises', { ...mine, name: newName });
+    }
+  }
+  const s = await d.get('settings', 'settings');
+  if (s) await d.put('settings', { ...s, migrations: [...(s.migrations ?? []), MIGRATION_NAMES_C] });
+  notify();
 }
 
 // ---------- one-time migration: two exercises Riley created on the phone (2026-11-17) ----------

@@ -214,7 +214,14 @@ function LiftDay(props: { name: string; dayId: string; today: DayKey; onBack: ()
             );
           })}
           {workout.plan.length === 0 && <p class="muted center">Nothing planned for today.</p>}
-          <button class="primary block big finish" onClick={leave}>
+          <button
+            class="primary block big finish"
+            onClick={async () => {
+              // Done = finished: Home moves this day to "Done this week" now (Back keeps it as Today).
+              if (workout && !workout.finished) await db.saveWorkout({ ...workout, finished: true });
+              await leave();
+            }}
+          >
             Done
           </button>
         </div>
@@ -363,7 +370,9 @@ function ExerciseCard(props: {
   const showActive = sets.length < slot.sets || extra;
   const future = Math.max(0, slot.sets - sets.length - 1);
   const short = (s: SetLog) => s.reps < slot.reps;
-  const lighter = (s: SetLog) => !!before.working && s.load.mode === before.working.mode && s.load.value < before.working.value;
+  // ↓ only against a weight you've actually logged before (not a guess from your notes).
+  const lighter = (s: SetLog) =>
+    !!before.working && before.verified && s.load.mode === before.working.mode && s.load.value < before.working.value;
   const complete = sets.length >= slot.sets;
 
   return (

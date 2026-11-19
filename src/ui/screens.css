@@ -134,3 +134,10 @@ button:disabled { opacity: 0.5; }
 .day-btn.done .spacer { color: var(--muted); }
 .done-word { color: var(--good); font-size: 15px; font-weight: 600; }
 .closeout-add { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+
+/* New exercise form */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 15px; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.new-ex-field { gap: 6px; }
+.new-ex-preview { font-size: 18px; min-height: 26px; }

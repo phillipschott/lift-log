@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import * as db from '../data/db';
 import type { Exercise } from '../data/types';
 import { useDb } from './common';
+import { NewExerciseForm } from './NewExercise';
 
 /**
  * Full-screen picker: one search box that filters as you type.
@@ -12,6 +13,7 @@ export function SwapPicker(props: { current: Exercise; onPick: (ex: Exercise) =>
   const { current } = props;
   const all = useDb(() => db.listExercises(), []);
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
 
@@ -26,10 +28,14 @@ export function SwapPicker(props: { current: Exercise; onPick: (ex: Exercise) =>
     .sort((a, b) => a.name.localeCompare(b.name));
   const exact = (all ?? []).some((e) => e.name.trim().toLowerCase() === query);
 
-  const create = async () => {
-    const ex = await db.createExercise(q.trim(), current.mode);
-    props.onPick(ex);
-  };
+  if (creating && all)
+    return (
+      <div class="picker">
+        <div class="picker-list" style={{ padding: 16 }}>
+          <NewExerciseForm exercises={all} initialMovement={q} onCreate={props.onPick} onCancel={() => setCreating(false)} />
+        </div>
+      </div>
+    );
 
   return (
     <div class="picker">
@@ -58,9 +64,9 @@ export function SwapPicker(props: { current: Exercise; onPick: (ex: Exercise) =>
             {e.name}
           </button>
         ))}
-        {query && !exact && (
-          <button class="pick create" onClick={create}>
-            + Create '{q.trim()}'
+        {!exact && (
+          <button class="pick create" onClick={() => setCreating(true)}>
+            + New exercise{query ? ` '${q.trim()}'` : ''}
           </button>
         )}
       </div>

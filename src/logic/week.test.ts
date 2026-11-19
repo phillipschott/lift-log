@@ -71,3 +71,16 @@ describe('week', () => {
     expect(s.done.size).toBe(0);
   });
 });
+
+describe('Done button (2026-11-18)', () => {
+  it('a workout finished with Done today leaves the Today card and counts as done', () => {
+    const logs = [lift('day1', MON)];
+    expect(weekStatus(routine, [], logs, MON).upNext).toBe('day1'); // started, not finished: still Today
+    const fin: Workout = { id: 'f', date: MON, dayId: 'day1', plan: [], startedAt: 0, finished: true };
+    const s = weekStatus(routine, [fin], logs, MON);
+    expect(s.upNext).toBe('day2');
+    expect(s.upNextStarted).toBe(false);
+    expect(s.done.has('day1')).toBe(true);
+  });
+});
+

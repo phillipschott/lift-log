@@ -326,15 +326,25 @@ describe('History lift rows (bug 2026-11-17)', () => {
 
   it('incline cable fly: one full set at 15/15 then dropping to 10/10 is not an attempt', () => {
     const fly = ex(ps(13));
-    const logs = [log(T0, [ps(15), ps(10), ps(10)], [12, 12, 12], { targetSets: 3 })];
-    logs[0].targetReps = 12;
-    const st = computeFlagState({ load: ps(13), date: T0 }, logs, T0);
+    // An earlier session at 13/13 (as in Riley's history), then 15 once and 10s on another machine.
+    const logs = [
+      log(week(0), ps(13), [12, 12, 12], { targetSets: 3, targetReps: 12 }),
+      log(week(1), [ps(15), ps(10), ps(10)], [12, 12, 12], { targetSets: 3, targetReps: 12 }),
+    ];
+    const st = computeFlagState({ load: ps(13), date: T0 }, logs, week(1));
     expect(st.working).toEqual(ps(13));
     expect(st.flag).toBe(null);
-    const sum = liftSummary(fly, logs, T0);
+    const sum = liftSummary(fly, logs, week(1));
     expect(sum.current).toEqual(ps(13));
     expect(sum.change).toBe(0);
     expect(sum.trying).toBe(null);
+  });
+
+  it('…and with no earlier session, the 13/13 from notes was never real: 10/10 becomes the start', () => {
+    const logs = [log(T0, [ps(15), ps(10), ps(10)], [12, 12, 12], { targetSets: 3, targetReps: 12 })];
+    const st = computeFlagState({ load: ps(13), date: T0 }, logs, T0);
+    expect(st.working).toEqual(ps(10));
+    expect(st.flag).toBe(null);
   });
 
   it('an attempted weight shows as "trying", not as the current weight', () => {
@@ -351,6 +361,26 @@ describe('History lift rows (bug 2026-11-17)', () => {
     expect(sum.start).toEqual(ps(50));
     expect(sum.current).toEqual(ps(50));
     expect(sum.change).toBe(0);
+  });
+});
+
+describe('starting weight from notes is a guess (bug 2026-11-18)', () => {
+  const tot = (value: number): Load => ({ value, mode: 'total' });
+  it('hip thrust: notes said 85, first session at 50 → 50 is the start, no lighter-day', () => {
+    const base = { load: tot(85), date: T0 };
+    const before = computeFlagState(base, [], T0);
+    expect(before.verified).toBe(false);
+    const one = computeFlagState(base, [log(T0, tot(50), [12, 12, 12], { targetReps: 12 })], T0);
+    expect(one.working).toEqual(tot(50));
+    expect(one.verified).toBe(true);
+    expect(one.streak).toBe(1);
+    const two = computeFlagState(base, [log(T0, tot(50), [12, 12, 12], { targetReps: 12 }), log(week(1), tot(50), [12, 12, 12], { targetReps: 12 })], week(1));
+    expect(two.flag).toBe('up');
+  });
+
+  it('once a weight is logged, a lighter session is still a lighter day (unchanged)', () => {
+    const logs = [log(week(0), ps(50), [10, 10, 10]), log(week(1), ps(40), [10, 10, 10])];
+    expect(computeFlagState(base50, logs, week(1)).working).toEqual(ps(50));
   });
 });
 

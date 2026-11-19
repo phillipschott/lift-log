@@ -47,6 +47,8 @@ export function weekStatus(routine: Routine, workouts: Workout[], logs: Exercise
   for (const [id, count] of boxing) if (count >= BOXING_PER_WEEK) done.add(id);
 
   const lifts = routine.days.filter((d) => d.kind === 'lift');
+  // A day finished with Done today is not "Today" any more — it goes straight to Done.
+  for (const w of workouts) if (w.finished && w.date === today) startedToday.delete(w.dayId);
   const started = lifts.find((d) => startedToday.has(d.id))?.id;
   const upNext = started ?? lifts.find((d) => !done.has(d.id))?.id ?? null;
   return { done, upNext, upNextStarted: !!started, boxing };

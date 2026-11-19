@@ -1,7 +1,8 @@
 // Settings → Edit routine: one day's exercises, sets × reps, reorder, remove, add.
 import { useState } from 'preact/hooks';
-import type { Exercise, LoadMode, Routine, RoutineDay, Slot } from '../data/types';
+import type { Exercise, Routine, RoutineDay, Slot } from '../data/types';
 import * as db from '../data/db';
+import { NewExerciseForm } from './NewExercise';
 import { Sheet, TopBar } from './common';
 import { posNum } from './hist-util';
 
@@ -73,12 +74,6 @@ function NumField(props: { value: number; label: string; onSave: (n: number) => 
   );
 }
 
-const MODES: { mode: LoadMode; label: string }[] = [
-  { mode: 'per-side', label: 'Per side (45/45)' },
-  { mode: 'total', label: 'Total (105)' },
-  { mode: 'bodyweight', label: 'Bodyweight' },
-];
-
 /**
  * Search box over existing exercises. With `allowCreate`, offers "+ Create" only when no
  * exercise has that exact name (case-insensitive), so duplicates don't pile up.
@@ -91,12 +86,18 @@ export function ExercisePicker(props: {
   title?: string;
 }) {
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
   const query = q.trim().toLowerCase();
   const list = props.exercises
     .filter((e) => !query || e.name.toLowerCase().includes(query))
     .sort((a, b) => a.name.localeCompare(b.name));
   const exact = props.exercises.some((e) => e.name.trim().toLowerCase() === query);
-  const create = (mode: LoadMode) => db.createExercise(q.trim(), mode).then(props.onPick);
+  if (creating)
+    return (
+      <Sheet onClose={props.onClose}>
+        <NewExerciseForm exercises={props.exercises} initialMovement={q} onCreate={props.onPick} onCancel={() => setCreating(false)} />
+      </Sheet>
+    );
 
   return (
     <Sheet onClose={props.onClose}>
@@ -110,15 +111,10 @@ export function ExercisePicker(props: {
         ))}
         {!list.length && !props.allowCreate && <p class="muted">No match.</p>}
       </div>
-      {props.allowCreate && query && !exact && (
-        <div class="hist-create">
-          <div class="muted hist-small">+ Create “{q.trim()}” as:</div>
-          {MODES.map((m) => (
-            <button key={m.mode} class="block" onClick={() => create(m.mode)}>
-              {m.label}
-            </button>
-          ))}
-        </div>
+      {props.allowCreate && !exact && (
+        <button class="block hist-create" onClick={() => setCreating(true)}>
+          + New exercise{query ? ` “${q.trim()}”` : ''}
+        </button>
       )}
     </Sheet>
   );

@@ -70,6 +70,8 @@ export interface Workout {
   startedAt: number;
   /** Boxing: a single tap marks it done. */
   boxingDone?: boolean;
+  /** Tapped Done at the bottom of the workout: the day counts as finished (Home moves it to Done). */
+  finished?: boolean;
 }
 
 export interface SetLog {

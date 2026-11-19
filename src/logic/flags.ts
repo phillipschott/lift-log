@@ -14,6 +14,8 @@
 //  6. 🔵 Attempting = a real attempt at this weight, not hit yet.
 //  7. 🟠 Stalled = 3 sessions in a row at the weight with no new best in total reps.
 //  8. Per-day flags only for a slot with its own per-day starting weight (Day 4 incline @ 35/35).
+// 10. A starting weight from the notes/seed is a guess until you've logged a session: if your
+//     first session is lighter, that weight becomes the starting weight (not a "lighter day").
 //  9. Units matter: per-side, total and bodyweight loads are never compared. A session whose
 //     first set is in different units from the working weight makes that load the new
 //     starting weight (owned, streak 0) — e.g. a machine seeded as 105 total, logged as 50/50.
@@ -35,6 +37,8 @@ export interface FlagState {
   upIt: boolean;
   /** Day the working weight was adopted. */
   since: DayKey | null;
+  /** The working weight has been confirmed by a logged session (false = a guess from your notes). */
+  verified: boolean;
   /** Total reps over the judged sets at the working weight, one entry per session since adopted. */
   totals: number[];
   flag: Flag;
@@ -56,6 +60,7 @@ function initial(b: Baseline): FlagState {
     streak: 0,
     upIt: false,
     since: b.load ? b.date : null,
+    verified: false,
     totals: [],
     flag: null,
   };
@@ -68,6 +73,20 @@ function initial(b: Baseline): FlagState {
 function attemptLoad(sets: SetLog[], w: Load): Load | null {
   const first = sets.find((s) => s.load.mode === w.mode && !heavier(w, s.load));
   return first && heavier(first.load, w) ? first.load : null;
+}
+
+/** The weight (in these units) you did the most sets at; ties go to the heavier one. */
+function mainLoad(sets: SetLog[], mode: Load['mode']): Load | null {
+  const count = new Map<number, { load: Load; n: number }>();
+  for (const x of sets) {
+    if (x.load.mode !== mode) continue;
+    const c = count.get(x.load.value) ?? { load: x.load, n: 0 };
+    c.n++;
+    count.set(x.load.value, c);
+  }
+  let best: { load: Load; n: number } | null = null;
+  for (const c of count.values()) if (!best || c.n > best.n || (c.n === best.n && c.load.value > best.load.value)) best = c;
+  return best?.load ?? null;
 }
 
 /**
@@ -122,6 +141,18 @@ export function applyLog(st: FlagState, log: ExerciseLog): FlagState {
     s.totals = [];
   }
 
+  // Unconfirmed starting weight (from notes) and you lifted lighter: that's your real start.
+  // (The weight you did most sets at — so one lighter warm-up set doesn't count.)
+  const main = mainLoad(log.sets, s.working!.mode);
+  if (!s.verified && main && heavier(s.working!, main)) {
+    s.working = s.owned = main;
+    s.attempting = false;
+    s.streak = 0;
+    s.upIt = false;
+    s.since = log.date;
+    s.totals = [];
+  }
+
   const n = attemptLoad(log.sets, s.working!);
   if (n) {
     if (!(log.keepHeavier || isRealAttempt(log.sets, n, log.targetReps, log.targetSets))) {
@@ -137,6 +168,7 @@ export function applyLog(st: FlagState, log: ExerciseLog): FlagState {
   }
 
   scoreAtWorking(s, log);
+  s.verified = true;
   return s;
 }
 

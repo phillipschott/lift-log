@@ -289,7 +289,7 @@ describe('migration: clearer names (2026-11-17)', () => {
     expect(name('hack-squat')).toBe('Hack squat · plate-loaded');
     expect(ex.find((e) => e.id === 'squat')?.swapIds).toEqual(['leg-press', 'leg-press-plate', 'hack-squat']);
     // Runs once.
-    expect((await db.getSettings()).migrations).toEqual(['names-2026-11', 'names-2026-11b']);
+    expect((await db.getSettings()).migrations).toEqual(['names-2026-11', 'names-2026-11b', 'names-2026-11c']);
     await db.renameExercise('leg-press', 'Leg press · seated stack');
     await db.init();
     expect((await db.listExercises()).find((e) => e.id === 'leg-press')?.name).toBe('Leg press · seated stack');
@@ -317,7 +317,28 @@ describe('migration: two phone-created exercises (2026-11-17b)', () => {
     expect(ex.find((e) => e.id === 'wide-pulldown')).toMatchObject({ name: 'Lat pulldown · plate-loaded', start: null });
     expect((await db.logsForExercise('wide-pulldown')).map((l) => l.id)).toEqual(['lw']);
     expect(ex.find((e) => e.id === 'u-curl')?.name).toBe('Preacher curl · plate-loaded');
-    expect((await db.getSettings()).migrations).toEqual(['names-2026-11', 'names-2026-11b']);
+    expect((await db.getSettings()).migrations).toEqual(['names-2026-11', 'names-2026-11b', 'names-2026-11c']);
+  });
+});
+
+describe('migration: leftover phone names (2026-11-18)', () => {
+  it('renames Leg Press Machine / Calf Raise Machine when the seeded counterparts are gone', async () => {
+    const f = await db.exportAll();
+    f.settings = { ...f.settings, migrations: ['names-2026-11', 'names-2026-11b'] };
+    f.exercises = f.exercises.filter((e) => e.id !== 'leg-press' && e.id !== 'calf-raise-machine');
+    f.exercises = f.exercises.map((e) => ({ ...e, swapIds: e.swapIds.filter((x) => x !== 'leg-press' && x !== 'calf-raise-machine') }));
+    const mk = (id: string, name: string) => ({ id, name, mode: 'total' as const, start: null, swapIds: [], createdAt: 1 });
+    f.exercises.push(mk('u-lp', 'Leg Press Machine'), mk('u-cr', 'Calf Raise Machine'));
+    const lg = (id: string, exerciseId: string) => ({
+      id, workoutId: 'w-' + id, date: yesterday, dayId: 'day3', exerciseId, targetSets: 4, targetReps: 12,
+      sets: [12, 12, 12, 12].map((reps, i) => ({ load: { value: 240, mode: 'total' as const }, reps, at: i })),
+    });
+    f.logs.push(lg('a', 'u-lp'), lg('b', 'u-cr'));
+    await db.importAll(f);
+    await db.init();
+    const ex = await db.listExercises();
+    expect(ex.find((e) => e.id === 'u-lp')?.name).toBe('Leg press · machine');
+    expect(ex.find((e) => e.id === 'u-cr')?.name).toBe('Calf raise · machine');
   });
 });
 
